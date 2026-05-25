@@ -52,7 +52,7 @@ export async function scorePronunciation(
   const pushStream = sdk.AudioInputStream.createPushStream(
     sdk.AudioStreamFormat.getWaveFormatPCM(16000, 16, 1)
   );
-  pushStream.write(audio);
+  pushStream.write(audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength) as ArrayBuffer);
   pushStream.close();
 
   const audioConfig = sdk.AudioConfig.fromStreamInput(pushStream);
