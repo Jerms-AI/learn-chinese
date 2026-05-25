@@ -53,10 +53,9 @@ export function IntroducedList({
           {introducedIds.map((id) => {
             const entry = phraseLibrary[id];
             if (!entry) return null;
-            // Show what the LEARNER says back. For Q/A pairs that's `response`; for
-            // statement-only pairs the response is undefined so fall back to prompt
-            // (which IS the statement the user repeats).
-            const shown = entry.response ?? entry.prompt;
+            // Q/A pairs have both sides — show both because the user practices each
+            // direction (orchestrator can flip). Statement-only pairs have only prompt.
+            const hasBothSides = !!entry.response && entry.response.hanzi !== entry.prompt.hanzi;
             const tiers = mastery[id]?.lastTiers ?? [];
             const isMastered = tiers.length === 3 && tiers.every((t) => t !== "red");
             const isCurrent = id === currentPairId;
@@ -70,13 +69,25 @@ export function IntroducedList({
                 <span className="flex-shrink-0 pt-1.5">
                   <MasteryDots tiers={tiers} />
                 </span>
-                <div className="min-w-0 flex-1">
-                  <div className="font-serif text-xl leading-tight truncate">
-                    {shown.hanzi}
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div>
+                    <div className="font-serif text-lg leading-tight truncate">
+                      {entry.prompt.hanzi}
+                    </div>
+                    <div className="text-xs text-ink-soft/80 truncate">
+                      {entry.prompt.english}
+                    </div>
                   </div>
-                  <div className="text-xs text-ink-soft truncate">
-                    {shown.english}
-                  </div>
+                  {hasBothSides && (
+                    <div className="pl-3 border-l-2 border-ink-soft/10">
+                      <div className="font-serif text-base leading-tight truncate">
+                        {entry.response!.hanzi}
+                      </div>
+                      <div className="text-xs text-ink-soft/80 truncate">
+                        {entry.response!.english}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 {isMastered && (
                   <span className="flex-shrink-0 text-emerald-700 text-xs pt-1.5">✓</span>
