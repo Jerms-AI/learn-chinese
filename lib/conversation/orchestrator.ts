@@ -3,6 +3,8 @@ import type { Turn, Score } from "./state";
 import type { Phrase } from "@/lib/decks/schema";
 import { loadAllDecks } from "@/lib/decks/loader";
 import { pickNextPair } from "@/lib/decks/selector";
+import { getAnthropic, CLAUDE_MODEL } from "@/lib/providers/anthropic";
+import { SYSTEM_PROMPT, parseClaudeJson, type ClaudeDecision } from "./claude-prompt";
 
 export type OrchestratorInput = {
   history: Turn[];
@@ -63,6 +65,56 @@ async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorO
 }
 
 export async function runOrchestrator(input: OrchestratorInput): Promise<OrchestratorOutput> {
-  // Real Claude integration lands in Phase 9. For now, always use mock.
-  return mockOrchestrator(input);
+  const useMock = input.mock || !process.env.ANTHROPIC_API_KEY;
+  if (useMock) return mockOrchestrator(input);
+
+  const decks = await loadAllDecks(path.join(process.cwd(), "decks"));
+  const filtered = input.activeDeckIds.length > 0
+    ? decks.filter((d) => input.activeDeckIds.includes(d.deck.id))
+    : decks;
+  const availablePhrases = filtered.flatMap((d) => d.pairs).slice(0, 40);
+
+  const client = getAnthropic();
+  const userMsg = JSON.stringify({
+    history: input.history.slice(-12),
+    lastUserScore: input.lastUserScore,
+    availablePhrases,
+    metaIntent: input.metaIntent,
+  });
+
+  const resp = await client.messages.create({
+    model: CLAUDE_MODEL,
+    max_tokens: 600,
+    system: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userMsg }],
+  });
+
+  const textBlock = resp.content.find((b) => b.type === "text") as
+    | { type: "text"; text: string }
+    | undefined;
+  const text = textBlock?.text ?? "";
+  const decision: ClaudeDecision = parseClaudeJson(text);
+
+  if (decision.decision === "tutor" && decision.tutor) {
+    return {
+      speakerNext: "user",
+      routeTo: "tutor",
+      tutorPayload: {
+        targetWord: decision.tutor.targetWord,
+        diagnosis: decision.tutor.diagnosis,
+        referenceAudioUrl: "/mocks/silence.mp3",
+        retryPrompt: decision.tutor.retryPrompt,
+      },
+    };
+  }
+
+  if (decision.decision === "ai_speak" && decision.aiUtterance) {
+    return {
+      speakerNext: "ai",
+      routeTo: "conversation",
+      aiUtterance: { ...decision.aiUtterance, audioUrl: "/mocks/silence.mp3" },
+    };
+  }
+
+  return { speakerNext: "user", routeTo: "conversation" };
 }
