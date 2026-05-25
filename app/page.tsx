@@ -60,11 +60,22 @@ export default function Page() {
         activeDeckIds: [],
         metaIntent: null,
       });
+
       if (out.routeTo === "tutor" && out.tutorPayload) {
         setTutor(out.tutorPayload);
-      } else {
-        dispatch({ type: "AI_CONFIRMED" });
-        setTutor(null);
+        return;
+      }
+
+      // Pass branch. Two sub-cases:
+      //  - Orchestrator returned a new aiUtterance → confirm the prior phrase, speak the new one.
+      //  - Orchestrator returned no utterance (Claude said "user_speak") → confirm and wait for user.
+      setTutor(null);
+      dispatch({ type: "AI_CONFIRMED" });
+      if (out.aiUtterance) {
+        const url = await postTts(out.aiUtterance.hanzi);
+        setAudioUrl(url);
+        await playAudio(url);
+        dispatch({ type: "AI_SPOKE", utterance: out.aiUtterance });
       }
     } finally { setBusy(false); }
   }
@@ -89,6 +100,12 @@ export default function Page() {
           onRetry={userSpoke}
           onSkip={() => { setTutor(null); dispatch({ type: "TUTOR_RESOLVED" }); }}
         />
+      )}
+
+      {!tutor && state.mode === "awaiting-user-question" && (
+        <p className="text-center text-sm text-muted">
+          Your turn — ask me something in Mandarin.
+        </p>
       )}
 
       {!tutor && <MicButton onAudio={userSpoke} />}
