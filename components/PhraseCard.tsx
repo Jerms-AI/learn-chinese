@@ -3,13 +3,6 @@ import type { Phrase } from "@/lib/decks/schema";
 import type { Score, Tier } from "@/lib/conversation/state";
 import { TonedPinyin } from "./TonedPinyin";
 
-const TIER_DOT_BG: Record<Tier, string> = {
-  green: "bg-emerald-600",
-  yellow: "bg-lime-500",
-  orange: "bg-amber-500",
-  red: "bg-red-600",
-};
-
 const TIER_TINT_BG: Record<Tier, string> = {
   green: "bg-emerald-50",
   yellow: "bg-lime-50",
@@ -49,31 +42,12 @@ function ScoredHanzi({ score, fallbackHanzi }: { score: Score; fallbackHanzi: st
   );
 }
 
-function MasteryDots({ tiers }: { tiers: Tier[] }) {
-  const slots: (Tier | null)[] = [0, 1, 2].map((i) => tiers[i] ?? null);
-  const allNonRed = slots.length === 3 && slots.every((t) => t && t !== "red");
-  const latestIdx = tiers.length - 1; // most recent dot gets a soft ring
-  return (
-    <span className="inline-flex items-center gap-1.5" title={`mastery: ${tiers.join(" · ") || "no attempts yet"}`}>
-      {slots.map((t, i) => (
-        <span
-          key={i}
-          className={`inline-block w-3.5 h-3.5 rounded-full ${
-            t ? TIER_DOT_BG[t] : "bg-transparent border border-ink-soft/30"
-          } ${i === latestIdx && t ? "ring-2 ring-offset-1 ring-ink-soft/30" : ""}`}
-        />
-      ))}
-      {allNonRed && <span className="ml-1 text-emerald-700 text-xs font-medium">✓ mastered</span>}
-    </span>
-  );
-}
-
 export function PhraseCard({
   phrase,
   expectedResponse,
   lastScore,
   isNew = false,
-  lastTiers = [],
+  latestTier = null,
   onReplay,
 }: {
   phrase: Phrase;
@@ -81,23 +55,21 @@ export function PhraseCard({
   lastScore?: Score | null;
   /** True the very first time this phrase is shown to the user. */
   isNew?: boolean;
-  /** Rolling window of the last 3 attempt tiers for this pair. */
-  lastTiers?: Tier[];
+  /** Latest attempt tier — used to tint the "your line" section. */
+  latestTier?: Tier | null;
   onReplay?: () => void;
 }) {
   const showsAnswer = expectedResponse && expectedResponse.hanzi !== phrase.hanzi;
-  const latestTier = lastTiers[lastTiers.length - 1] ?? null;
 
   return (
     <div className="rounded-2xl bg-card p-10 shadow-sm relative">
-      <div className="absolute top-4 right-4 flex items-center gap-2">
-        {isNew && (
+      {isNew && (
+        <div className="absolute top-4 right-4">
           <span className="text-[11px] uppercase tracking-widest font-medium text-terracotta bg-terracotta/10 px-2 py-1 rounded-full">
             ✨ new
           </span>
-        )}
-        {!isNew && <MasteryDots tiers={lastTiers} />}
-      </div>
+        </div>
+      )}
 
       <div className="text-center">
         <div className="text-xs uppercase tracking-widest text-ink-soft mb-3">they said</div>

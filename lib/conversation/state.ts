@@ -51,6 +51,13 @@ export function avgWordAccuracy(score: Score): number {
   return Math.round(sum / score.words.length);
 }
 
+/** Snapshot of a pair's display info, captured at first introduction so the library
+ * card can render it without re-fetching deck data. */
+export type LibraryEntry = {
+  prompt: Phrase;           // what the AI says — the "question side" of the pair
+  response?: Phrase;        // what the user should say — usually the "answer side"
+};
+
 export type State = {
   mode: Mode;
   history: Turn[];
@@ -60,6 +67,7 @@ export type State = {
   currentPairId?: string;          // deck pair currently being practiced
   introducedIds: string[];         // pair IDs the learner has been exposed to (in order)
   mastery: Record<string, Mastery>;
+  phraseLibrary: Record<string, LibraryEntry>;
 };
 
 export type Event =
@@ -72,7 +80,14 @@ export type Event =
   | { type: "REHYDRATE"; state: State };
 
 export function initialState(): State {
-  return { mode: "idle", history: [], nextSpeaker: "ai", introducedIds: [], mastery: {} };
+  return {
+    mode: "idle",
+    history: [],
+    nextSpeaker: "ai",
+    introducedIds: [],
+    mastery: {},
+    phraseLibrary: {},
+  };
 }
 
 export function applyEvent(s: State, e: Event): State {
@@ -87,9 +102,17 @@ export function applyEvent(s: State, e: Event): State {
         phrase: e.utterance,
         at: Date.now(),
       };
-      // If this pair is newly introduced and we haven't seen it before, append to the order.
+      // If this pair is newly introduced and we haven't seen it before, append to the order
+      // AND snapshot its prompt/response in the library card.
       const newlyIntroduced =
         e.isNewPhrase && e.pairId && !s.introducedIds.includes(e.pairId);
+      const phraseLibrary =
+        newlyIntroduced && e.pairId
+          ? {
+              ...s.phraseLibrary,
+              [e.pairId]: { prompt: e.utterance, response: e.expectedResponse },
+            }
+          : s.phraseLibrary;
       return {
         ...s,
         mode: "awaiting-user-answer",
@@ -98,6 +121,7 @@ export function applyEvent(s: State, e: Event): State {
         expectedResponse: e.expectedResponse,
         currentPairId: e.pairId,
         introducedIds: newlyIntroduced ? [...s.introducedIds, e.pairId!] : s.introducedIds,
+        phraseLibrary,
       };
     }
 

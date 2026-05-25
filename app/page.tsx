@@ -5,6 +5,7 @@ import { MicButton } from "@/components/MicButton";
 import { ConversationRail } from "@/components/ConversationRail";
 import { MetaBar } from "@/components/MetaBar";
 import { TutorPanel, type TutorPayload } from "@/components/TutorPanel";
+import { IntroducedList } from "@/components/IntroducedList";
 import { applyEvent, initialState, tierFromAvgAccuracy, avgWordAccuracy, type Score } from "@/lib/conversation/state";
 import { saveState, loadState, clearState } from "@/lib/conversation/persistence";
 import { fetchTurn, postScore, postTts } from "@/lib/api-client";
@@ -148,7 +149,7 @@ export default function Page() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12 space-y-8">
+    <main className="mx-auto max-w-6xl px-6 py-12 space-y-8">
       <header className="flex items-baseline justify-between">
         <div>
           <h1 className="font-serif text-3xl">学中文</h1>
@@ -189,50 +190,65 @@ export default function Page() {
         </div>
       </header>
 
-      {state.pendingPhrase && (
-        <PhraseCard
-          phrase={state.pendingPhrase}
-          expectedResponse={state.expectedResponse}
-          lastScore={lastScore}
-          isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
-          lastTiers={state.currentPairId ? state.mastery[state.currentPairId]?.lastTiers ?? [] : []}
-          onReplay={() => audioUrl && playAudio(audioUrl)}
-        />
-      )}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
+        <div className="space-y-8">
+          {state.pendingPhrase && (() => {
+            const currentTiers = state.currentPairId ? state.mastery[state.currentPairId]?.lastTiers ?? [] : [];
+            const latest = currentTiers[currentTiers.length - 1] ?? null;
+            return (
+              <PhraseCard
+                phrase={state.pendingPhrase}
+                expectedResponse={state.expectedResponse}
+                lastScore={lastScore}
+                isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
+                latestTier={latest}
+                onReplay={() => audioUrl && playAudio(audioUrl)}
+              />
+            );
+          })()}
 
-      {tutor && (
-        <TutorPanel
-          key={tutor.targetWord}
-          payload={tutor}
-          attemptScore={tutorAttempt}
-          passThreshold={65}
-          onRetry={userSpoke}
-          onSkip={() => { setTutor(null); setTutorAttempt(null); dispatch({ type: "TUTOR_RESOLVED" }); }}
-        />
-      )}
+          {tutor && (
+            <TutorPanel
+              key={tutor.targetWord}
+              payload={tutor}
+              attemptScore={tutorAttempt}
+              passThreshold={65}
+              onRetry={userSpoke}
+              onSkip={() => { setTutor(null); setTutorAttempt(null); dispatch({ type: "TUTOR_RESOLVED" }); }}
+            />
+          )}
 
-      {!tutor && state.mode === "awaiting-user-question" && (
-        <p className="text-center text-sm text-ink-soft">
-          Your turn — ask me something in Mandarin.
-        </p>
-      )}
+          {!tutor && state.mode === "awaiting-user-question" && (
+            <p className="text-center text-sm text-ink-soft">
+              Your turn — ask me something in Mandarin.
+            </p>
+          )}
 
-      {!tutor && retryHint && (
-        <div className="rounded-md border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-ink-soft">
-          {retryHint}
+          {!tutor && retryHint && (
+            <div className="rounded-md border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-ink-soft">
+              {retryHint}
+            </div>
+          )}
+
+          {!tutor && <MicButton onAudio={userSpoke} />}
+
+          <MetaBar onMeta={(intent) => aiTurn(intent)} />
+
+          <section className="border-t pt-6">
+            <h2 className="text-sm uppercase tracking-wider text-ink-soft mb-3">Conversation</h2>
+            <div className="max-h-64 overflow-y-auto pr-2 rounded-md">
+              <ConversationRail turns={state.history} />
+            </div>
+          </section>
         </div>
-      )}
 
-      {!tutor && <MicButton onAudio={userSpoke} />}
-
-      <MetaBar onMeta={(intent) => aiTurn(intent)} />
-
-      <section className="border-t pt-6">
-        <h2 className="text-sm uppercase tracking-wider text-ink-soft mb-3">Conversation</h2>
-        <div className="max-h-64 overflow-y-auto pr-2 rounded-md">
-          <ConversationRail turns={state.history} />
-        </div>
-      </section>
+        <IntroducedList
+          introducedIds={state.introducedIds}
+          phraseLibrary={state.phraseLibrary}
+          mastery={state.mastery}
+          currentPairId={state.currentPairId}
+        />
+      </div>
     </main>
   );
 }
