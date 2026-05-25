@@ -7,7 +7,7 @@ const TIER_DOT_BG: Record<Tier, string> = {
   green: "bg-emerald-600",
   yellow: "bg-lime-500",
   orange: "bg-amber-500",
-  red: "bg-red-500",
+  red: "bg-red-600",
 };
 
 const TIER_TINT_BG: Record<Tier, string> = {
@@ -52,15 +52,18 @@ function ScoredHanzi({ score, fallbackHanzi }: { score: Score; fallbackHanzi: st
 function MasteryDots({ tiers }: { tiers: Tier[] }) {
   const slots: (Tier | null)[] = [0, 1, 2].map((i) => tiers[i] ?? null);
   const allNonRed = slots.length === 3 && slots.every((t) => t && t !== "red");
+  const latestIdx = tiers.length - 1; // most recent dot gets a soft ring
   return (
-    <span className="inline-flex items-center gap-1" title={`mastery: ${tiers.join(" · ") || "no attempts yet"}`}>
+    <span className="inline-flex items-center gap-1.5" title={`mastery: ${tiers.join(" · ") || "no attempts yet"}`}>
       {slots.map((t, i) => (
         <span
           key={i}
-          className={`inline-block w-2.5 h-2.5 rounded-full ${t ? TIER_DOT_BG[t] : "bg-ink-soft/20"}`}
+          className={`inline-block w-3.5 h-3.5 rounded-full ${
+            t ? TIER_DOT_BG[t] : "bg-transparent border border-ink-soft/30"
+          } ${i === latestIdx && t ? "ring-2 ring-offset-1 ring-ink-soft/30" : ""}`}
         />
       ))}
-      {allNonRed && <span className="ml-1 text-emerald-700 text-xs">✓</span>}
+      {allNonRed && <span className="ml-1 text-emerald-700 text-xs font-medium">✓ mastered</span>}
     </span>
   );
 }
