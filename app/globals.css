@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --color-parchment: #f6f4ef;
+  --color-ink: #1f1b16;
+  --color-terracotta: #c2410c;
+  --color-muted: #8a8275;
+  --color-card: #ffffff;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), Georgia, serif;
+}
+
+html, body { height: 100%; }
+
+/* Tone color hints (used by pinyin renderer) */
+.tone-1 { color: #2563eb; }   /* high — blue */
+.tone-2 { color: #16a34a; }   /* rising — green */
+.tone-3 { color: #ca8a04; }   /* dipping — amber */
+.tone-4 { color: #dc2626; }   /* falling — red */
+.tone-5 { color: var(--color-muted); }  /* neutral */
