@@ -103,7 +103,7 @@ export default function Page() {
         </button>
       </header>
 
-      {state.pendingPhrase && !tutor && (
+      {state.pendingPhrase && (
         <PhraseCard
           phrase={state.pendingPhrase}
           expectedResponse={state.expectedResponse}
