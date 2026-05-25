@@ -20,6 +20,7 @@ export default function Page() {
   const [tutor, setTutor] = useState<TutorPayload | null>(null);
   const [lastScore, setLastScore] = useState<Score | null>(null);
   const [tutorAttempt, setTutorAttempt] = useState<Score | null>(null);
+  const [retryHint, setRetryHint] = useState<string | null>(null);
   const hydratedRef = useRef(false);
 
   // Hydrate state from localStorage AFTER mount so SSR + first client render agree.
@@ -62,10 +63,16 @@ export default function Page() {
     const ref = inTutor
       ? tutor!.retryPrompt
       : state.expectedResponse?.hanzi ?? state.pendingPhrase?.hanzi ?? "";
+    setRetryHint(null); // clear any prior "didn't catch that" while we score the new attempt
     setBusy(true);
     try {
       const score = await postScore(blob, ref);
-      const scoreShape: Score = { accuracy: score.accuracy, tonesOk: score.tonesOk, words: score.words };
+      const scoreShape: Score = {
+        accuracy: score.accuracy,
+        completeness: score.completeness,
+        tonesOk: score.tonesOk,
+        words: score.words,
+      };
 
       // Only overwrite the full-sentence score chips on the PhraseCard when this
       // is a full-sentence attempt. Tutor retries shouldn't clobber that view.
@@ -86,7 +93,15 @@ export default function Page() {
       });
 
       if (out.routeTo === "tutor" && out.tutorPayload) {
+        setRetryHint(null);
         setTutor(out.tutorPayload);
+        return;
+      }
+
+      if (out.routeTo === "retry-full") {
+        setTutor(null);
+        setTutorAttempt(null);
+        setRetryHint(out.retryHint ?? "Try that again.");
         return;
       }
 
@@ -95,6 +110,7 @@ export default function Page() {
 
       setTutorAttempt(null);
       setTutor(null);
+      setRetryHint(null);
       dispatch({ type: "AI_CONFIRMED" });
       if (out.aiUtterance) {
         setLastScore(null); // clear old score before next prompt
@@ -139,6 +155,12 @@ export default function Page() {
         <p className="text-center text-sm text-ink-soft">
           Your turn — ask me something in Mandarin.
         </p>
+      )}
+
+      {!tutor && retryHint && (
+        <div className="rounded-md border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-ink-soft">
+          {retryHint}
+        </div>
       )}
 
       {!tutor && <MicButton onAudio={userSpoke} />}

@@ -5,7 +5,7 @@ import type { Turn } from "@/lib/conversation/state";
 
 const turns: Turn[] = [
   { speaker: "ai", text: "你好吗?", phrase: { hanzi: "你好吗?", pinyin: "nǐ hǎo ma?", english: "How are you?" }, at: 1 },
-  { speaker: "user", text: "我很好", score: { accuracy: 90, tonesOk: true, words: [] }, at: 2 },
+  { speaker: "user", text: "我很好", score: { accuracy: 90, completeness: 100, tonesOk: true, words: [] }, at: 2 },
 ];
 
 describe("<ConversationRail>", () => {

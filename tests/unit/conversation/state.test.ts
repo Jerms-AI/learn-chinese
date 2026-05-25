@@ -23,7 +23,7 @@ describe("conversation state machine", () => {
     s = applyEvent(s, {
       type: "USER_UTTERANCE",
       transcript: "我很好",
-      score: { accuracy: 90, tonesOk: true, words: [] },
+      score: { accuracy: 90, completeness: 100, tonesOk: true, words: [] },
     });
     expect(s.history.at(-1)?.speaker).toBe("user");
     expect(s.history.at(-1)?.text).toBe("我很好");
@@ -38,7 +38,7 @@ describe("conversation state machine", () => {
     s = applyEvent(s, {
       type: "USER_UTTERANCE",
       transcript: "wo hen hao",
-      score: { accuracy: 50, tonesOk: false, words: [] },
+      score: { accuracy: 50, completeness: 80, tonesOk: false, words: [] },
     });
     expect(s.mode).toBe("tutor");
   });
@@ -52,7 +52,7 @@ describe("conversation state machine", () => {
     s = applyEvent(s, {
       type: "USER_UTTERANCE",
       transcript: "我很好",
-      score: { accuracy: 90, tonesOk: true, words: [] },
+      score: { accuracy: 90, completeness: 100, tonesOk: true, words: [] },
     });
     s = applyEvent(s, { type: "AI_CONFIRMED" });
     expect(s.mode).toBe("awaiting-user-question");

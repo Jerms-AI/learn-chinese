@@ -21,20 +21,46 @@ export type OrchestratorOutput = {
   aiUtterance?: Phrase & { audioUrl: string };
   /** What the user should say next. Used as the reference text for Azure pronunciation scoring. */
   expectedUserResponse?: Phrase;
-  routeTo: "conversation" | "tutor";
+  /**
+   * - "conversation": pass; advance to next phrase (aiUtterance set if AI speaks next).
+   * - "tutor": user mostly said the phrase but a specific word was off → drill that word.
+   * - "retry-full": user's audio was largely incomplete (didn't catch most of it) →
+   *   stay on the same phrase, prompt them to try again.
+   */
+  routeTo: "conversation" | "tutor" | "retry-full";
   tutorPayload?: {
     targetWord: string;
     diagnosis: string;
     referenceAudioUrl: string;
     retryPrompt: string;
   };
+  /** Friendly nudge to display when routeTo is "retry-full". */
+  retryHint?: string;
 };
 
-const PASS_THRESHOLD = 80;       // full-sentence attempts
-const RETRY_PASS_THRESHOLD = 65; // single-character drills in tutor mode
+const PASS_THRESHOLD = 80;        // full-sentence attempts
+const RETRY_PASS_THRESHOLD = 65;  // single-character drills in tutor mode
+const COMPLETENESS_FLOOR = 50;    // below this, treat as "didn't catch most of it"
 
 async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorOutput> {
   const threshold = input.isRetry ? RETRY_PASS_THRESHOLD : PASS_THRESHOLD;
+
+  // Distinguish "didn't catch most of the phrase" from "right phrase, tones off".
+  // Skip this branch for tutor retries — single-character drills naturally have
+  // wildly variable completeness against a single-char reference.
+  if (
+    input.lastUserScore &&
+    !input.isRetry &&
+    input.lastUserScore.completeness < COMPLETENESS_FLOOR
+  ) {
+    return {
+      speakerNext: "user",
+      routeTo: "retry-full",
+      retryHint:
+        "I didn't catch most of that — try the whole phrase again, a bit slower.",
+    };
+  }
+
   if (input.lastUserScore && (input.lastUserScore.accuracy < threshold || !input.lastUserScore.tonesOk)) {
     const worst = [...input.lastUserScore.words].sort((a, b) => a.accuracy - b.accuracy)[0];
     return {
@@ -122,6 +148,14 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
         referenceAudioUrl: "/mocks/silence.mp3",
         retryPrompt: decision.tutor.retryPrompt,
       },
+    };
+  }
+
+  if (decision.decision === "retry_full") {
+    return {
+      speakerNext: "user",
+      routeTo: "retry-full",
+      retryHint: decision.retryHint ?? "Try the whole phrase again.",
     };
   }
 

@@ -11,7 +11,8 @@ export type Mode =
 export type Speaker = "ai" | "user";
 
 export type Score = {
-  accuracy: number;        // 0-100
+  accuracy: number;        // 0-100, overall pronunciation accuracy
+  completeness: number;    // 0-100, how much of the reference text was heard
   tonesOk: boolean;
   words: Array<{ word: string; accuracy: number; tone?: number }>;
 };

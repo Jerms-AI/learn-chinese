@@ -20,7 +20,7 @@ describe("orchestrator (mock mode)", () => {
       history: [
         { speaker: "ai", text: "你好吗?", phrase: { hanzi: "你好吗?", pinyin: "nǐ hǎo ma?", english: "?" }, at: 1 },
       ],
-      lastUserScore: { accuracy: 40, tonesOk: false, words: [{ word: "你", accuracy: 30, tone: 3 }] },
+      lastUserScore: { accuracy: 40, completeness: 90, tonesOk: false, words: [{ word: "你", accuracy: 30, tone: 3 }] },
       activeDeckIds: ["fixture-mini"],
       metaIntent: null,
       mock: true,
