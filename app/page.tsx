@@ -19,6 +19,7 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [tutor, setTutor] = useState<TutorPayload | null>(null);
   const [lastScore, setLastScore] = useState<Score | null>(null);
+  const [tutorAttempt, setTutorAttempt] = useState<Score | null>(null);
   const hydratedRef = useRef(false);
 
   // Hydrate state from localStorage AFTER mount so SSR + first client render agree.
@@ -68,7 +69,8 @@ export default function Page() {
 
       // Only overwrite the full-sentence score chips on the PhraseCard when this
       // is a full-sentence attempt. Tutor retries shouldn't clobber that view.
-      if (!inTutor) setLastScore(scoreShape);
+      if (inTutor) setTutorAttempt(scoreShape);
+      else setLastScore(scoreShape);
 
       dispatch({
         type: "USER_UTTERANCE",
@@ -80,6 +82,7 @@ export default function Page() {
         lastUserScore: scoreShape,
         activeDeckIds: [],
         metaIntent: null,
+        isRetry: inTutor,
       });
 
       if (out.routeTo === "tutor" && out.tutorPayload) {
@@ -90,6 +93,7 @@ export default function Page() {
       // Pass branch. Pause briefly so the user can read their per-char accuracy.
       await new Promise((r) => setTimeout(r, 1500));
 
+      setTutorAttempt(null);
       setTutor(null);
       dispatch({ type: "AI_CONFIRMED" });
       if (out.aiUtterance) {
@@ -124,8 +128,10 @@ export default function Page() {
         <TutorPanel
           key={tutor.targetWord}
           payload={tutor}
+          attemptScore={tutorAttempt}
+          passThreshold={65}
           onRetry={userSpoke}
-          onSkip={() => { setTutor(null); dispatch({ type: "TUTOR_RESOLVED" }); }}
+          onSkip={() => { setTutor(null); setTutorAttempt(null); dispatch({ type: "TUTOR_RESOLVED" }); }}
         />
       )}
 

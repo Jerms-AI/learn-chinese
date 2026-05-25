@@ -11,6 +11,8 @@ export type OrchestratorInput = {
   lastUserScore: Score | null;
   activeDeckIds: string[];
   metaIntent: string | null;
+  /** True when this is a tutor-mode retry on a single character, not a full-sentence attempt. */
+  isRetry?: boolean;
   mock?: boolean;
 };
 
@@ -28,10 +30,12 @@ export type OrchestratorOutput = {
   };
 };
 
-const PASS_THRESHOLD = 80;
+const PASS_THRESHOLD = 80;       // full-sentence attempts
+const RETRY_PASS_THRESHOLD = 65; // single-character drills in tutor mode
 
 async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorOutput> {
-  if (input.lastUserScore && (input.lastUserScore.accuracy < PASS_THRESHOLD || !input.lastUserScore.tonesOk)) {
+  const threshold = input.isRetry ? RETRY_PASS_THRESHOLD : PASS_THRESHOLD;
+  if (input.lastUserScore && (input.lastUserScore.accuracy < threshold || !input.lastUserScore.tonesOk)) {
     const worst = [...input.lastUserScore.words].sort((a, b) => a.accuracy - b.accuracy)[0];
     return {
       speakerNext: "user",

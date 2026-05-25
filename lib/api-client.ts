@@ -7,6 +7,7 @@ export async function fetchTurn(args: {
   lastUserScore: Score | null;
   activeDeckIds: string[];
   metaIntent: string | null;
+  isRetry?: boolean;
 }): Promise<OrchestratorOutput> {
   const res = await fetch("/api/turn", {
     method: "POST",
