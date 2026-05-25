@@ -54,14 +54,22 @@ export default function Page() {
   }
 
   async function userSpoke(blob: Blob) {
-    // Score against the expected RESPONSE (what user should say), not the AI's question.
-    // Fall back to the AI's phrase only for statement decks where they're the same.
-    const ref = state.expectedResponse?.hanzi ?? state.pendingPhrase?.hanzi ?? "";
+    const inTutor = !!tutor;
+    // In tutor mode, the user is drilling a single character — score against THAT,
+    // not the full sentence (otherwise the missing characters all score 0 and the
+    // loop chases a different "worst word" each retry).
+    const ref = inTutor
+      ? tutor!.retryPrompt
+      : state.expectedResponse?.hanzi ?? state.pendingPhrase?.hanzi ?? "";
     setBusy(true);
     try {
       const score = await postScore(blob, ref);
       const scoreShape: Score = { accuracy: score.accuracy, tonesOk: score.tonesOk, words: score.words };
-      setLastScore(scoreShape);
+
+      // Only overwrite the full-sentence score chips on the PhraseCard when this
+      // is a full-sentence attempt. Tutor retries shouldn't clobber that view.
+      if (!inTutor) setLastScore(scoreShape);
+
       dispatch({
         type: "USER_UTTERANCE",
         transcript: score.transcript,
