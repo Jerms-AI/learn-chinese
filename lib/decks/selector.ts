@@ -1,5 +1,5 @@
 import type { Deck, Pair } from "./schema";
-import type { Mastery } from "@/lib/conversation/state";
+import { isMastered, type Mastery, type Tier } from "@/lib/conversation/state";
 
 export type PickOptions = {
   seenIds: string[];
@@ -21,10 +21,12 @@ export function pickNextPair(decks: Deck[], opts: PickOptions): Pair {
 export type ProgressiveOptions = {
   introducedIds: string[];
   mastery: Record<string, Mastery>;
-  /** Streak required to consider a phrase "owned" enough to introduce a new one. */
-  masteryThreshold?: number;
   /** Avoid picking this id (e.g. the one just shown). */
   avoidId?: string;
+  /** Probability of biasing toward the newest-introduced pair during its first few attempts. */
+  newPhraseFocusProbability?: number;
+  /** How many attempts the "focus on new" bias persists for. */
+  newPhraseFocusAttempts?: number;
   now?: number;
   rng?: () => number;
 };
@@ -34,11 +36,22 @@ export type ProgressivePick = {
   isNew: boolean;
 };
 
+const TIER_VALUE: Record<Tier, number> = { red: 0, orange: 1, yellow: 2, green: 3 };
+
+function masteryQuality(m: Mastery | undefined): number {
+  if (!m || (m.lastTiers ?? []).length === 0) return 0;
+  const avg = m.lastTiers.reduce((s, t) => s + TIER_VALUE[t], 0) / m.lastTiers.length;
+  return avg / 3; // 0–1
+}
+
 /**
  * Comprehensible-input style selector:
  *  - If nothing has been introduced yet, introduce the first pair in the deck.
- *  - If every currently-introduced pair has streak ≥ threshold, introduce the next one.
- *  - Otherwise pick from the introduced pool weighted toward weakest/oldest.
+ *  - If every currently-introduced pair is mastered (3 non-red in a row), introduce the next.
+ *  - In the first few attempts on a newly-introduced pair, bias selection toward it
+ *    (focus on the new content), then mix back into the regular weighted pool.
+ *  - Otherwise pick from the introduced pool weighted toward weakest (low tier quality)
+ *    and oldest (long since last seen).
  *
  * Pair ordering is the deck author's order (decks are concatenated in array order).
  */
@@ -49,9 +62,10 @@ export function pickPhraseProgressive(
   const allPairs = decks.flatMap((d) => d.pairs);
   if (allPairs.length === 0) throw new Error("No pairs available");
 
-  const threshold = opts.masteryThreshold ?? 3;
   const now = opts.now ?? Date.now();
   const rng = opts.rng ?? Math.random;
+  const focusProb = opts.newPhraseFocusProbability ?? 0.7;
+  const focusAttempts = opts.newPhraseFocusAttempts ?? 3;
   const introducedSet = new Set(opts.introducedIds);
   const introduced = allPairs.filter((p) => introducedSet.has(p.id));
 
@@ -60,14 +74,28 @@ export function pickPhraseProgressive(
     return { pair: allPairs[0], isNew: true };
   }
 
-  // All introduced pairs are at-or-above mastery → introduce the next one.
-  const allMastered = introduced.every(
-    (p) => (opts.mastery[p.id]?.streak ?? 0) >= threshold
-  );
+  // All introduced pairs are mastered → introduce the next.
+  const allMastered = introduced.every((p) => isMastered(opts.mastery[p.id]));
   if (allMastered) {
     const next = allPairs.find((p) => !introducedSet.has(p.id));
     if (next) return { pair: next, isNew: true };
     // Nothing new to introduce; fall through to weighted pick over introduced.
+  }
+
+  // Focus-on-new bias: the most-recently-introduced pair gets a heavy preference
+  // during its first few attempts (or until mastered).
+  const newestId = opts.introducedIds[opts.introducedIds.length - 1];
+  const newestMastery = opts.mastery[newestId];
+  const newestAttempts = newestMastery?.attempts ?? 0;
+  const newestPair = introduced.find((p) => p.id === newestId);
+  if (
+    newestPair &&
+    newestId !== opts.avoidId &&
+    newestAttempts < focusAttempts &&
+    !isMastered(newestMastery) &&
+    rng() < focusProb
+  ) {
+    return { pair: newestPair, isNew: false };
   }
 
   // Weighted pick from the introduced pool. Avoid picking the same pair twice
@@ -78,12 +106,11 @@ export function pickPhraseProgressive(
 
   const weighted = candidates.map((p) => {
     const m = opts.mastery[p.id];
-    const streak = m?.streak ?? 0;
+    const quality = masteryQuality(m);                                   // 0–1
     const sinceLastSeenMs = m?.lastSeenAt ? now - m.lastSeenAt : 60_000;
-    // Lower streak → higher weight (needs practice). Older last-seen → higher weight (refresh).
-    const streakWeight = 1 / (streak + 1);
+    const weaknessWeight = 1 - quality + 0.15;                           // weak phrases come back more
     const recencyWeight = 1 + Math.log(1 + sinceLastSeenMs / 60_000);
-    return { pair: p, weight: streakWeight * recencyWeight };
+    return { pair: p, weight: weaknessWeight * recencyWeight };
   });
 
   const total = weighted.reduce((s, w) => s + w.weight, 0);

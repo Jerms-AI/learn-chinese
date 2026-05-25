@@ -21,12 +21,35 @@ export type Turn =
   | { speaker: "ai"; text: string; phrase: Phrase; at: number }
   | { speaker: "user"; text: string; score: Score; at: number };
 
+export type Tier = "red" | "orange" | "yellow" | "green";
+
 export type Mastery = {
-  streak: number;       // consecutive successful attempts
-  attempts: number;     // total attempts
-  correct: number;      // total passes
-  lastSeenAt: number;   // ms timestamp of most recent attempt
+  lastTiers: Tier[];      // rolling window of the last 3 attempt tiers (chronological)
+  attempts: number;       // total attempts
+  correct: number;        // total non-red attempts
+  lastSeenAt: number;     // ms timestamp of most recent attempt
 };
+
+/** 90+ green · 80-89 yellow · 70-79 orange · <70 red. */
+export function tierFromAvgAccuracy(avg: number): Tier {
+  if (avg >= 90) return "green";
+  if (avg >= 80) return "yellow";
+  if (avg >= 70) return "orange";
+  return "red";
+}
+
+/** A phrase is mastered when its 3 most recent attempts are all non-red. */
+export function isMastered(m: Mastery | undefined): boolean {
+  if (!m || (m.lastTiers ?? []).length < 3) return false;
+  return m.lastTiers.every((t) => t !== "red");
+}
+
+/** Per-character average accuracy from a score — what tiers are computed against. */
+export function avgWordAccuracy(score: Score): number {
+  if (score.words.length === 0) return score.accuracy;
+  const sum = score.words.reduce((s, w) => s + w.accuracy, 0);
+  return Math.round(sum / score.words.length);
+}
 
 export type State = {
   mode: Mode;
@@ -42,7 +65,7 @@ export type State = {
 export type Event =
   | { type: "START" }
   | { type: "AI_SPOKE"; utterance: Phrase; expectedResponse?: Phrase; pairId?: string; isNewPhrase?: boolean }
-  | { type: "USER_UTTERANCE"; transcript: string; score: Score; passed: boolean }
+  | { type: "USER_UTTERANCE"; transcript: string; score: Score; passed: boolean; tier?: Tier | null }
   | { type: "AI_CONFIRMED" }
   | { type: "TUTOR_RESOLVED" }
   | { type: "RESET" }
@@ -85,16 +108,18 @@ export function applyEvent(s: State, e: Event): State {
         score: e.score,
         at: Date.now(),
       };
-      // Update mastery for the pair currently being practiced.
+      // Update mastery for the pair currently being practiced. Tier is null for
+      // tutor retries (we don't push those into the rolling window).
       let mastery = s.mastery;
-      if (s.currentPairId) {
-        const prior = s.mastery[s.currentPairId] ?? { streak: 0, attempts: 0, correct: 0, lastSeenAt: 0 };
+      if (s.currentPairId && e.tier) {
+        const prior = s.mastery[s.currentPairId] ?? { lastTiers: [], attempts: 0, correct: 0, lastSeenAt: 0 };
+        const nextTiers = [...(prior.lastTiers ?? []), e.tier].slice(-3);
         mastery = {
           ...s.mastery,
           [s.currentPairId]: {
-            streak: e.passed ? prior.streak + 1 : 0,
+            lastTiers: nextTiers,
             attempts: prior.attempts + 1,
-            correct: prior.correct + (e.passed ? 1 : 0),
+            correct: prior.correct + (e.tier !== "red" ? 1 : 0),
             lastSeenAt: Date.now(),
           },
         };

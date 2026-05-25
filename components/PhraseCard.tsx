@@ -1,11 +1,33 @@
 "use client";
 import type { Phrase } from "@/lib/decks/schema";
-import type { Score } from "@/lib/conversation/state";
+import type { Score, Tier } from "@/lib/conversation/state";
 import { TonedPinyin } from "./TonedPinyin";
 
+const TIER_DOT_BG: Record<Tier, string> = {
+  green: "bg-emerald-600",
+  yellow: "bg-lime-500",
+  orange: "bg-amber-500",
+  red: "bg-red-500",
+};
+
+const TIER_TINT_BG: Record<Tier, string> = {
+  green: "bg-emerald-50",
+  yellow: "bg-lime-50",
+  orange: "bg-amber-50",
+  red: "bg-red-50",
+};
+
+const TIER_RING: Record<Tier, string> = {
+  green: "ring-emerald-300",
+  yellow: "ring-lime-300",
+  orange: "ring-amber-300",
+  red: "ring-red-300",
+};
+
 function accuracyColor(n: number): string {
-  if (n >= 80) return "text-green-700";
-  if (n >= 60) return "text-amber-600";
+  if (n >= 90) return "text-emerald-700";
+  if (n >= 80) return "text-lime-700";
+  if (n >= 70) return "text-amber-600";
   return "text-red-600";
 }
 
@@ -27,13 +49,28 @@ function ScoredHanzi({ score, fallbackHanzi }: { score: Score; fallbackHanzi: st
   );
 }
 
+function MasteryDots({ tiers }: { tiers: Tier[] }) {
+  const slots: (Tier | null)[] = [0, 1, 2].map((i) => tiers[i] ?? null);
+  const allNonRed = slots.length === 3 && slots.every((t) => t && t !== "red");
+  return (
+    <span className="inline-flex items-center gap-1" title={`mastery: ${tiers.join(" · ") || "no attempts yet"}`}>
+      {slots.map((t, i) => (
+        <span
+          key={i}
+          className={`inline-block w-2.5 h-2.5 rounded-full ${t ? TIER_DOT_BG[t] : "bg-ink-soft/20"}`}
+        />
+      ))}
+      {allNonRed && <span className="ml-1 text-emerald-700 text-xs">✓</span>}
+    </span>
+  );
+}
+
 export function PhraseCard({
   phrase,
   expectedResponse,
   lastScore,
   isNew = false,
-  streak = 0,
-  masteryThreshold = 3,
+  lastTiers = [],
   onReplay,
 }: {
   phrase: Phrase;
@@ -41,34 +78,22 @@ export function PhraseCard({
   lastScore?: Score | null;
   /** True the very first time this phrase is shown to the user. */
   isNew?: boolean;
-  /** Consecutive correct count for this phrase. */
-  streak?: number;
-  /** Streak required to mark this phrase as mastered. */
-  masteryThreshold?: number;
+  /** Rolling window of the last 3 attempt tiers for this pair. */
+  lastTiers?: Tier[];
   onReplay?: () => void;
 }) {
   const showsAnswer = expectedResponse && expectedResponse.hanzi !== phrase.hanzi;
-  const isMastered = streak >= masteryThreshold;
+  const latestTier = lastTiers[lastTiers.length - 1] ?? null;
 
   return (
     <div className="rounded-2xl bg-card p-10 shadow-sm relative">
-      {/* Top-right badge: "new" or streak dots */}
       <div className="absolute top-4 right-4 flex items-center gap-2">
         {isNew && (
           <span className="text-[11px] uppercase tracking-widest font-medium text-terracotta bg-terracotta/10 px-2 py-1 rounded-full">
             ✨ new
           </span>
         )}
-        {!isNew && (
-          <span className="text-[11px] text-ink-soft" title={`mastery streak: ${streak}/${masteryThreshold}`}>
-            {Array.from({ length: masteryThreshold }).map((_, i) => (
-              <span key={i} className={i < streak ? "text-terracotta" : "text-ink-soft/30"}>
-                ●
-              </span>
-            ))}
-            {isMastered && <span className="ml-1 text-green-700">✓</span>}
-          </span>
-        )}
+        {!isNew && <MasteryDots tiers={lastTiers} />}
       </div>
 
       <div className="text-center">
@@ -90,7 +115,11 @@ export function PhraseCard({
       </div>
 
       {showsAnswer && (
-        <div className="mt-8 pt-6 border-t border-dashed text-center">
+        <div
+          className={`mt-8 pt-6 px-4 pb-4 -mx-4 border-t border-dashed text-center rounded-md transition-colors ${
+            lastScore && latestTier ? `${TIER_TINT_BG[latestTier]} ring-1 ${TIER_RING[latestTier]}` : ""
+          }`}
+        >
           <div className="flex items-center justify-center gap-3 mb-3">
             <span className="text-xs uppercase tracking-widest text-terracotta">your line</span>
             {lastScore && (

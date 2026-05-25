@@ -5,7 +5,7 @@ import { MicButton } from "@/components/MicButton";
 import { ConversationRail } from "@/components/ConversationRail";
 import { MetaBar } from "@/components/MetaBar";
 import { TutorPanel, type TutorPayload } from "@/components/TutorPanel";
-import { applyEvent, initialState, type Score } from "@/lib/conversation/state";
+import { applyEvent, initialState, tierFromAvgAccuracy, avgWordAccuracy, type Score } from "@/lib/conversation/state";
 import { saveState, loadState, clearState } from "@/lib/conversation/persistence";
 import { fetchTurn, postScore, postTts } from "@/lib/api-client";
 
@@ -88,13 +88,17 @@ export default function Page() {
       if (inTutor) setTutorAttempt(scoreShape);
       else setLastScore(scoreShape);
 
-      // Pass criterion for mastery tracking: same bar as full-sentence orchestrator routing.
-      const passed = !inTutor && scoreShape.accuracy >= 80 && scoreShape.tonesOk && scoreShape.completeness >= 50;
+      // For full-sentence attempts, compute tier from per-character average accuracy.
+      // Tutor retries don't push into the rolling-tier window (tier = null).
+      const avgChar = avgWordAccuracy(scoreShape);
+      const tier = inTutor ? null : tierFromAvgAccuracy(avgChar);
+      const passed = !inTutor && tier !== "red" && scoreShape.completeness >= 50;
       dispatch({
         type: "USER_UTTERANCE",
         transcript: score.transcript,
         score: scoreShape,
         passed,
+        tier,
       });
       const out = await fetchTurn({
         history: state.history,
@@ -152,7 +156,11 @@ export default function Page() {
             <p className="text-xs text-ink-soft mt-1">
               {state.introducedIds.length} {state.introducedIds.length === 1 ? "phrase" : "phrases"} introduced
               {(() => {
-                const mastered = state.introducedIds.filter((id) => (state.mastery[id]?.streak ?? 0) >= 3).length;
+                const mastered = state.introducedIds.filter((id) => {
+                  const m = state.mastery[id];
+                  if (!m || (m.lastTiers ?? []).length < 3) return false;
+                  return m.lastTiers.every((t) => t !== "red");
+                }).length;
                 return mastered > 0 ? ` · ${mastered} mastered` : "";
               })()}
             </p>
@@ -187,8 +195,7 @@ export default function Page() {
           expectedResponse={state.expectedResponse}
           lastScore={lastScore}
           isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
-          streak={state.currentPairId ? state.mastery[state.currentPairId]?.streak ?? 0 : 0}
-          masteryThreshold={3}
+          lastTiers={state.currentPairId ? state.mastery[state.currentPairId]?.lastTiers ?? [] : []}
           onReplay={() => audioUrl && playAudio(audioUrl)}
         />
       )}
