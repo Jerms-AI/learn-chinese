@@ -1,0 +1,70 @@
+deck:
+  id: seed
+  title: Seed Phrases — Greetings & Courtesies
+  source: hand-curated for initial dev
+pairs:
+  - id: seed-001
+    q:
+      hanzi: 你好吗？
+      pinyin: nǐ hǎo ma?
+      english: How are you?
+    a:
+      hanzi: 我很好，谢谢。
+      pinyin: wǒ hěn hǎo, xièxie.
+      english: I'm fine, thank you.
+    tags: [greetings]
+
+  - id: seed-002
+    q:
+      hanzi: 你叫什么名字？
+      pinyin: nǐ jiào shénme míngzi?
+      english: What's your name?
+    a:
+      hanzi: 我叫杰瑞米。
+      pinyin: wǒ jiào jiéruìmǐ.
+      english: My name is Jeremy.
+    tags: [greetings, introductions]
+
+  - id: seed-003
+    q:
+      hanzi: 你是哪国人？
+      pinyin: nǐ shì nǎ guó rén?
+      english: What country are you from?
+    a:
+      hanzi: 我是美国人。
+      pinyin: wǒ shì měiguó rén.
+      english: I'm American.
+    tags: [introductions]
+
+  - id: seed-004
+    q:
+      hanzi: 你会说中文吗？
+      pinyin: nǐ huì shuō zhōngwén ma?
+      english: Can you speak Chinese?
+    a:
+      hanzi: 我会说一点中文。
+      pinyin: wǒ huì shuō yìdiǎn zhōngwén.
+      english: I can speak a little Chinese.
+    tags: [language]
+
+  - id: seed-005
+    q:
+      hanzi: 现在几点？
+      pinyin: xiànzài jǐ diǎn?
+      english: What time is it?
+    a:
+      hanzi: 现在三点。
+      pinyin: xiànzài sān diǎn.
+      english: It's three o'clock.
+    tags: [time]
+
+  - id: seed-006
+    q:
+      hanzi: 你饿了吗？
+      pinyin: nǐ è le ma?
+      english: Are you hungry?
+    a:
+      hanzi: 我有点饿。
+      pinyin: wǒ yǒu diǎn è.
+      english: I'm a little hungry.
+    tags: [food]

@@ -84,13 +84,14 @@ export default function Page() {
 
       {tutor && (
         <TutorPanel
+          key={tutor.targetWord}
           payload={tutor}
           onRetry={userSpoke}
           onSkip={() => { setTutor(null); dispatch({ type: "TUTOR_RESOLVED" }); }}
         />
       )}
 
-      <MicButton onAudio={userSpoke} />
+      {!tutor && <MicButton onAudio={userSpoke} />}
 
       <MetaBar onMeta={(intent) => aiTurn(intent)} />
 
