@@ -53,6 +53,10 @@ export function IntroducedList({
           {introducedIds.map((id) => {
             const entry = phraseLibrary[id];
             if (!entry) return null;
+            // Show what the LEARNER says back. For Q/A pairs that's `response`; for
+            // statement-only pairs the response is undefined so fall back to prompt
+            // (which IS the statement the user repeats).
+            const shown = entry.response ?? entry.prompt;
             const tiers = mastery[id]?.lastTiers ?? [];
             const isMastered = tiers.length === 3 && tiers.every((t) => t !== "red");
             const isCurrent = id === currentPairId;
@@ -68,10 +72,10 @@ export function IntroducedList({
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="font-serif text-xl leading-tight truncate">
-                    {entry.prompt.hanzi}
+                    {shown.hanzi}
                   </div>
                   <div className="text-xs text-ink-soft truncate">
-                    {entry.prompt.english}
+                    {shown.english}
                   </div>
                 </div>
                 {isMastered && (
