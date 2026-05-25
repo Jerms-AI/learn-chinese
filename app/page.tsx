@@ -4,6 +4,7 @@ import { PhraseCard } from "@/components/PhraseCard";
 import { MicButton } from "@/components/MicButton";
 import { ConversationRail } from "@/components/ConversationRail";
 import { MetaBar } from "@/components/MetaBar";
+import { TutorPanel, type TutorPayload } from "@/components/TutorPanel";
 import { applyEvent, initialState } from "@/lib/conversation/state";
 import { saveState, loadState } from "@/lib/conversation/persistence";
 import { fetchTurn, postScore, postTts } from "@/lib/api-client";
@@ -16,6 +17,7 @@ export default function Page() {
   const [state, dispatch] = useReducer(reducer, undefined, () => loadState() ?? initialState());
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tutor, setTutor] = useState<TutorPayload | null>(null);
 
   useEffect(() => { saveState(state); }, [state]);
 
@@ -58,10 +60,12 @@ export default function Page() {
         activeDeckIds: [],
         metaIntent: null,
       });
-      if (out.routeTo === "conversation") {
+      if (out.routeTo === "tutor" && out.tutorPayload) {
+        setTutor(out.tutorPayload);
+      } else {
         dispatch({ type: "AI_CONFIRMED" });
+        setTutor(null);
       }
-      // tutor routing handled in Phase 7
     } finally { setBusy(false); }
   }
 
@@ -76,6 +80,14 @@ export default function Page() {
 
       {state.pendingPhrase && (
         <PhraseCard phrase={state.pendingPhrase} onReplay={() => audioUrl && playAudio(audioUrl)} />
+      )}
+
+      {tutor && (
+        <TutorPanel
+          payload={tutor}
+          onRetry={userSpoke}
+          onSkip={() => { setTutor(null); dispatch({ type: "TUTOR_RESOLVED" }); }}
+        />
       )}
 
       <MicButton onAudio={userSpoke} />
