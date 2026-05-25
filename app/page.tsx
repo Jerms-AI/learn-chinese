@@ -133,7 +133,9 @@ export default function Page() {
 
       <section className="border-t pt-6">
         <h2 className="text-sm uppercase tracking-wider text-ink-soft mb-3">Conversation</h2>
-        <ConversationRail turns={state.history} />
+        <div className="max-h-64 overflow-y-auto pr-2 rounded-md">
+          <ConversationRail turns={state.history} />
+        </div>
       </section>
     </main>
   );
