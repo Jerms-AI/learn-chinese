@@ -52,24 +52,27 @@ async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorO
   const pair = pickNextPair(filtered.length > 0 ? filtered : decks, {
     seenIds: input.history.filter((t) => t.speaker === "ai").map((t) => t.text),
   });
-  const phrase = pair.q ?? pair.statement!;
-  // If this is a Q/A pair, the user's expected response is the answer.
-  // For statement-only pairs (e.g. "thank you"), the user repeats the statement itself.
-  const expected = pair.a ?? pair.statement ?? phrase;
+
+  // For Q/A pairs, flip the role half the time so the user practices both
+  // answering (AI asks q → user says a) and asking (AI says a → user says q).
+  // Statement-only pairs (e.g. "thank you") always have user repeat the statement.
+  const flipRole = pair.q && pair.a && Math.random() < 0.5;
+  const aiSays = flipRole ? pair.a! : (pair.q ?? pair.statement!);
+  const userSays = flipRole ? pair.q! : (pair.a ?? pair.statement ?? aiSays);
 
   return {
     speakerNext: "ai",
     routeTo: "conversation",
     aiUtterance: {
-      hanzi: phrase.hanzi,
-      pinyin: phrase.pinyin,
-      english: phrase.english,
+      hanzi: aiSays.hanzi,
+      pinyin: aiSays.pinyin,
+      english: aiSays.english,
       audioUrl: "/mocks/ai-utterance.mp3",
     },
     expectedUserResponse: {
-      hanzi: expected.hanzi,
-      pinyin: expected.pinyin,
-      english: expected.english,
+      hanzi: userSays.hanzi,
+      pinyin: userSays.pinyin,
+      english: userSays.english,
     },
   };
 }

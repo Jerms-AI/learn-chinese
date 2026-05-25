@@ -1,0 +1,26 @@
+deck:
+  id: test-pair
+  title: Quick Test — 2 Phrases
+  source: hand-curated for AI/UX testing
+pairs:
+  - id: test-001
+    q:
+      hanzi: 你会说中文吗？
+      pinyin: nǐ huì shuō zhōngwén ma?
+      english: Do you speak Chinese?
+    a:
+      hanzi: 是，我会说中文。
+      pinyin: shì, wǒ huì shuō zhōngwén.
+      english: Yes, I speak Chinese.
+    tags: [test, language]
+
+  - id: test-002
+    q:
+      hanzi: 你想吃东西吗？
+      pinyin: nǐ xiǎng chī dōngxi ma?
+      english: Do you want to eat something?
+    a:
+      hanzi: 是，我想吃东西。
+      pinyin: shì, wǒ xiǎng chī dōngxi.
+      english: Yes, I want to eat something.
+    tags: [test, food]
