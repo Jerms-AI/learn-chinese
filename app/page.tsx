@@ -5,7 +5,7 @@ import { MicButton } from "@/components/MicButton";
 import { ConversationRail } from "@/components/ConversationRail";
 import { MetaBar } from "@/components/MetaBar";
 import { TutorPanel, type TutorPayload } from "@/components/TutorPanel";
-import { applyEvent, initialState } from "@/lib/conversation/state";
+import { applyEvent, initialState, type Score } from "@/lib/conversation/state";
 import { saveState, loadState } from "@/lib/conversation/persistence";
 import { fetchTurn, postScore, postTts } from "@/lib/api-client";
 
@@ -18,6 +18,7 @@ export default function Page() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tutor, setTutor] = useState<TutorPayload | null>(null);
+  const [lastScore, setLastScore] = useState<Score | null>(null);
   const hydratedRef = useRef(false);
 
   // Hydrate state from localStorage AFTER mount so SSR + first client render agree.
@@ -59,14 +60,16 @@ export default function Page() {
     setBusy(true);
     try {
       const score = await postScore(blob, ref);
+      const scoreShape: Score = { accuracy: score.accuracy, tonesOk: score.tonesOk, words: score.words };
+      setLastScore(scoreShape);
       dispatch({
         type: "USER_UTTERANCE",
         transcript: score.transcript,
-        score: { accuracy: score.accuracy, tonesOk: score.tonesOk, words: score.words },
+        score: scoreShape,
       });
       const out = await fetchTurn({
         history: state.history,
-        lastUserScore: { accuracy: score.accuracy, tonesOk: score.tonesOk, words: score.words },
+        lastUserScore: scoreShape,
         activeDeckIds: [],
         metaIntent: null,
       });
@@ -76,12 +79,13 @@ export default function Page() {
         return;
       }
 
-      // Pass branch. Two sub-cases:
-      //  - Orchestrator returned a new aiUtterance → confirm the prior phrase, speak the new one.
-      //  - Orchestrator returned no utterance (Claude said "user_speak") → confirm and wait for user.
+      // Pass branch. Pause briefly so the user can read their per-char accuracy.
+      await new Promise((r) => setTimeout(r, 1500));
+
       setTutor(null);
       dispatch({ type: "AI_CONFIRMED" });
       if (out.aiUtterance) {
+        setLastScore(null); // clear old score before next prompt
         const url = await postTts(out.aiUtterance.hanzi);
         setAudioUrl(url);
         await playAudio(url);
@@ -103,6 +107,7 @@ export default function Page() {
         <PhraseCard
           phrase={state.pendingPhrase}
           expectedResponse={state.expectedResponse}
+          lastScore={lastScore}
           onReplay={() => audioUrl && playAudio(audioUrl)}
         />
       )}
