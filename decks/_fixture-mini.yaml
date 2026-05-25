@@ -1,0 +1,15 @@
+deck:
+  id: fixture-mini
+  title: Fixture Mini
+  source: test
+pairs:
+  - id: f1
+    q:
+      hanzi: 你好
+      pinyin: nǐ hǎo
+      english: hello
+    a:
+      hanzi: 你好
+      pinyin: nǐ hǎo
+      english: hello
+    tags: [test]
