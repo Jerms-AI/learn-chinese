@@ -11,6 +11,9 @@ export default defineConfig({
     include: ["tests/unit/**/*.test.{ts,tsx}"],
   },
   resolve: {
-    alias: { "@": path.resolve(__dirname, ".") },
+    alias: {
+      "@": path.resolve(__dirname, "."),
+      "server-only": path.resolve(__dirname, "node_modules/server-only/empty.js"),
+    },
   },
 });
