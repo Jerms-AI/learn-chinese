@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { PhraseCard } from "@/components/PhraseCard";
 import { MicButton } from "@/components/MicButton";
 import { ConversationRail } from "@/components/ConversationRail";
@@ -14,12 +14,20 @@ function reducer(s: ReturnType<typeof initialState>, e: Parameters<typeof applyE
 }
 
 export default function Page() {
-  const [state, dispatch] = useReducer(reducer, undefined, () => loadState() ?? initialState());
+  const [state, dispatch] = useReducer(reducer, initialState());
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tutor, setTutor] = useState<TutorPayload | null>(null);
+  const hydratedRef = useRef(false);
 
-  useEffect(() => { saveState(state); }, [state]);
+  // Hydrate state from localStorage AFTER mount so SSR + first client render agree.
+  useEffect(() => {
+    const saved = loadState();
+    if (saved) dispatch({ type: "REHYDRATE", state: saved });
+    hydratedRef.current = true;
+  }, []);
+
+  useEffect(() => { if (hydratedRef.current) saveState(state); }, [state]);
 
   async function playAudio(url: string) {
     const audio = new Audio(url);
@@ -89,7 +97,7 @@ export default function Page() {
         </button>
       </header>
 
-      {state.pendingPhrase && (
+      {state.pendingPhrase && !tutor && (
         <PhraseCard phrase={state.pendingPhrase} onReplay={() => audioUrl && playAudio(audioUrl)} />
       )}
 
@@ -103,7 +111,7 @@ export default function Page() {
       )}
 
       {!tutor && state.mode === "awaiting-user-question" && (
-        <p className="text-center text-sm text-muted">
+        <p className="text-center text-sm text-ink-soft">
           Your turn — ask me something in Mandarin.
         </p>
       )}
@@ -113,7 +121,7 @@ export default function Page() {
       <MetaBar onMeta={(intent) => aiTurn(intent)} />
 
       <section className="border-t pt-6">
-        <h2 className="text-sm uppercase tracking-wider text-muted mb-3">Conversation</h2>
+        <h2 className="text-sm uppercase tracking-wider text-ink-soft mb-3">Conversation</h2>
         <ConversationRail turns={state.history} />
       </section>
     </main>

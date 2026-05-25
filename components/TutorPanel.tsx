@@ -30,20 +30,35 @@ export function TutorPanel({
   }, [payload.targetWord]);
 
   return (
-    <div className="rounded-2xl bg-card p-8 shadow-md border-l-4 border-terracotta space-y-4">
-      <div className="text-center">
-        <div className="font-serif text-6xl">{payload.targetWord}</div>
+    <div className="rounded-2xl bg-card p-8 shadow-md border-l-4 border-terracotta space-y-5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs uppercase tracking-widest text-terracotta font-medium">
+          ◆ Tutor mode — let&apos;s drill this
+        </span>
+        <button onClick={onSkip} className="text-xs text-ink-soft underline">
+          skip
+        </button>
       </div>
-      <p className="text-sm text-muted">{payload.diagnosis}</p>
+
+      <div className="text-center">
+        <div className="font-serif text-7xl tracking-wide">{payload.targetWord}</div>
+      </div>
+
+      <p className="text-sm text-ink-soft leading-relaxed">{payload.diagnosis}</p>
+
       {refUrl ? (
-        <audio controls src={refUrl} className="w-full" autoPlay />
+        <div className="space-y-1">
+          <div className="text-xs text-ink-soft">listen ↓</div>
+          <audio controls src={refUrl} className="w-full" autoPlay />
+        </div>
       ) : (
-        <div className="text-xs text-muted text-center">loading reference audio…</div>
+        <div className="text-xs text-ink-soft text-center">loading reference audio…</div>
       )}
-      <MicButton onAudio={onRetry} />
-      <button onClick={onSkip} className="text-xs text-muted underline mx-auto block">
-        skip and move on
-      </button>
+
+      <div className="border-t pt-4">
+        <div className="text-xs text-ink-soft mb-2 text-center">now try it →</div>
+        <MicButton onAudio={onRetry} />
+      </div>
     </div>
   );
 }

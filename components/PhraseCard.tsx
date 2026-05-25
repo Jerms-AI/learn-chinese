@@ -9,7 +9,7 @@ export function PhraseCard({ phrase, onReplay }: { phrase: Phrase; onReplay?: ()
       <div className="mt-4 text-2xl">
         <TonedPinyin text={phrase.pinyin} />
       </div>
-      <div className="mt-2 text-muted">{phrase.english}</div>
+      <div className="mt-2 text-ink-soft">{phrase.english}</div>
       {onReplay && (
         <button
           aria-label="Replay phrase audio"

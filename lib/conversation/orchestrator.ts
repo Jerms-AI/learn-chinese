@@ -36,7 +36,7 @@ async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorO
       routeTo: "tutor",
       tutorPayload: {
         targetWord: worst?.word ?? "?",
-        diagnosis: `Your "${worst?.word ?? "?"}" came in low (accuracy ${worst?.accuracy ?? 0}). Try again with a clearer tone.`,
+        diagnosis: `That's close — your "${worst?.word ?? "?"}" came in a bit off. Listen to the reference, then give it another shot.`,
         referenceAudioUrl: "/mocks/silence.mp3",
         retryPrompt: worst?.word ?? "?",
       },

@@ -33,7 +33,8 @@ export type Event =
   | { type: "USER_UTTERANCE"; transcript: string; score: Score }
   | { type: "AI_CONFIRMED" }
   | { type: "TUTOR_RESOLVED" }
-  | { type: "RESET" };
+  | { type: "RESET" }
+  | { type: "REHYDRATE"; state: State };
 
 const PASS_THRESHOLD = 80;
 
@@ -84,5 +85,8 @@ export function applyEvent(s: State, e: Event): State {
 
     case "RESET":
       return initialState();
+
+    case "REHYDRATE":
+      return e.state;
   }
 }
