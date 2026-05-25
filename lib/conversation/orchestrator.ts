@@ -17,6 +17,8 @@ export type OrchestratorInput = {
 export type OrchestratorOutput = {
   speakerNext: "ai" | "user";
   aiUtterance?: Phrase & { audioUrl: string };
+  /** What the user should say next. Used as the reference text for Azure pronunciation scoring. */
+  expectedUserResponse?: Phrase;
   routeTo: "conversation" | "tutor";
   tutorPayload?: {
     targetWord: string;
@@ -51,6 +53,9 @@ async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorO
     seenIds: input.history.filter((t) => t.speaker === "ai").map((t) => t.text),
   });
   const phrase = pair.q ?? pair.statement!;
+  // If this is a Q/A pair, the user's expected response is the answer.
+  // For statement-only pairs (e.g. "thank you"), the user repeats the statement itself.
+  const expected = pair.a ?? pair.statement ?? phrase;
 
   return {
     speakerNext: "ai",
@@ -60,6 +65,11 @@ async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorO
       pinyin: phrase.pinyin,
       english: phrase.english,
       audioUrl: "/mocks/ai-utterance.mp3",
+    },
+    expectedUserResponse: {
+      hanzi: expected.hanzi,
+      pinyin: expected.pinyin,
+      english: expected.english,
     },
   };
 }
@@ -113,8 +123,13 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
       speakerNext: "ai",
       routeTo: "conversation",
       aiUtterance: { ...decision.aiUtterance, audioUrl: "/mocks/silence.mp3" },
+      expectedUserResponse: decision.expectedUserResponse,
     };
   }
 
-  return { speakerNext: "user", routeTo: "conversation" };
+  return {
+    speakerNext: "user",
+    routeTo: "conversation",
+    expectedUserResponse: decision.expectedUserResponse,
+  };
 }

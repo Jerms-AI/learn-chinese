@@ -24,12 +24,13 @@ export type State = {
   mode: Mode;
   history: Turn[];
   nextSpeaker: Speaker;
-  pendingPhrase?: Phrase;
+  pendingPhrase?: Phrase;        // what AI just said
+  expectedResponse?: Phrase;     // what user should say back (scoring reference)
 };
 
 export type Event =
   | { type: "START" }
-  | { type: "AI_SPOKE"; utterance: Phrase }
+  | { type: "AI_SPOKE"; utterance: Phrase; expectedResponse?: Phrase }
   | { type: "USER_UTTERANCE"; transcript: string; score: Score }
   | { type: "AI_CONFIRMED" }
   | { type: "TUTOR_RESOLVED" }
@@ -59,6 +60,7 @@ export function applyEvent(s: State, e: Event): State {
         mode: "awaiting-user-answer",
         history: [...s.history, turn],
         pendingPhrase: e.utterance,
+        expectedResponse: e.expectedResponse,
       };
     }
 
@@ -78,7 +80,7 @@ export function applyEvent(s: State, e: Event): State {
     }
 
     case "AI_CONFIRMED":
-      return { ...s, mode: "awaiting-user-question", nextSpeaker: "user", pendingPhrase: undefined };
+      return { ...s, mode: "awaiting-user-question", nextSpeaker: "user", pendingPhrase: undefined, expectedResponse: undefined };
 
     case "TUTOR_RESOLVED":
       return { ...s, mode: "awaiting-user-question", nextSpeaker: "user" };

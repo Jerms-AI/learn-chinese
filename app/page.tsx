@@ -47,13 +47,15 @@ export default function Page() {
         const url = await postTts(out.aiUtterance.hanzi);
         setAudioUrl(url);
         await playAudio(url);
-        dispatch({ type: "AI_SPOKE", utterance: out.aiUtterance });
+        dispatch({ type: "AI_SPOKE", utterance: out.aiUtterance, expectedResponse: out.expectedUserResponse });
       }
     } finally { setBusy(false); }
   }
 
   async function userSpoke(blob: Blob) {
-    const ref = state.pendingPhrase?.hanzi ?? "";
+    // Score against the expected RESPONSE (what user should say), not the AI's question.
+    // Fall back to the AI's phrase only for statement decks where they're the same.
+    const ref = state.expectedResponse?.hanzi ?? state.pendingPhrase?.hanzi ?? "";
     setBusy(true);
     try {
       const score = await postScore(blob, ref);
@@ -83,7 +85,7 @@ export default function Page() {
         const url = await postTts(out.aiUtterance.hanzi);
         setAudioUrl(url);
         await playAudio(url);
-        dispatch({ type: "AI_SPOKE", utterance: out.aiUtterance });
+        dispatch({ type: "AI_SPOKE", utterance: out.aiUtterance, expectedResponse: out.expectedUserResponse });
       }
     } finally { setBusy(false); }
   }
@@ -98,7 +100,11 @@ export default function Page() {
       </header>
 
       {state.pendingPhrase && !tutor && (
-        <PhraseCard phrase={state.pendingPhrase} onReplay={() => audioUrl && playAudio(audioUrl)} />
+        <PhraseCard
+          phrase={state.pendingPhrase}
+          expectedResponse={state.expectedResponse}
+          onReplay={() => audioUrl && playAudio(audioUrl)}
+        />
       )}
 
       {tutor && (
