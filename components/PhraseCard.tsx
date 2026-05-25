@@ -10,8 +10,6 @@ function accuracyColor(n: number): string {
 }
 
 function ScoredHanzi({ score, fallbackHanzi }: { score: Score; fallbackHanzi: string }) {
-  // Azure for Mandarin segments roughly per-character. Iterate score.words to
-  // preserve Azure's actual segmentation rather than a naive char-by-char split.
   if (score.words.length === 0) {
     return <span className="font-serif text-4xl">{fallbackHanzi}</span>;
   }
@@ -33,17 +31,46 @@ export function PhraseCard({
   phrase,
   expectedResponse,
   lastScore,
+  isNew = false,
+  streak = 0,
+  masteryThreshold = 3,
   onReplay,
 }: {
   phrase: Phrase;
   expectedResponse?: Phrase;
   lastScore?: Score | null;
+  /** True the very first time this phrase is shown to the user. */
+  isNew?: boolean;
+  /** Consecutive correct count for this phrase. */
+  streak?: number;
+  /** Streak required to mark this phrase as mastered. */
+  masteryThreshold?: number;
   onReplay?: () => void;
 }) {
   const showsAnswer = expectedResponse && expectedResponse.hanzi !== phrase.hanzi;
+  const isMastered = streak >= masteryThreshold;
 
   return (
-    <div className="rounded-2xl bg-card p-10 shadow-sm">
+    <div className="rounded-2xl bg-card p-10 shadow-sm relative">
+      {/* Top-right badge: "new" or streak dots */}
+      <div className="absolute top-4 right-4 flex items-center gap-2">
+        {isNew && (
+          <span className="text-[11px] uppercase tracking-widest font-medium text-terracotta bg-terracotta/10 px-2 py-1 rounded-full">
+            ✨ new
+          </span>
+        )}
+        {!isNew && (
+          <span className="text-[11px] text-ink-soft" title={`mastery streak: ${streak}/${masteryThreshold}`}>
+            {Array.from({ length: masteryThreshold }).map((_, i) => (
+              <span key={i} className={i < streak ? "text-terracotta" : "text-ink-soft/30"}>
+                ●
+              </span>
+            ))}
+            {isMastered && <span className="ml-1 text-green-700">✓</span>}
+          </span>
+        )}
+      </div>
+
       <div className="text-center">
         <div className="text-xs uppercase tracking-widest text-ink-soft mb-3">they said</div>
         <div className="font-serif text-6xl leading-tight tracking-wide">{phrase.hanzi}</div>

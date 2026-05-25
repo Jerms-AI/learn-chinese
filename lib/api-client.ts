@@ -1,5 +1,5 @@
 "use client";
-import type { Score, Turn } from "@/lib/conversation/state";
+import type { Score, Turn, Mastery } from "@/lib/conversation/state";
 import type { OrchestratorOutput } from "@/lib/conversation/orchestrator";
 
 export async function fetchTurn(args: {
@@ -8,6 +8,9 @@ export async function fetchTurn(args: {
   activeDeckIds: string[];
   metaIntent: string | null;
   isRetry?: boolean;
+  currentPairId?: string;
+  introducedIds?: string[];
+  mastery?: Record<string, Mastery>;
 }): Promise<OrchestratorOutput> {
   const res = await fetch("/api/turn", {
     method: "POST",

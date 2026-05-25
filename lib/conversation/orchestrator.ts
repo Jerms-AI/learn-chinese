@@ -1,8 +1,8 @@
 import path from "node:path";
-import type { Turn, Score } from "./state";
+import type { Turn, Score, Mastery } from "./state";
 import type { Phrase } from "@/lib/decks/schema";
 import { loadAllDecks } from "@/lib/decks/loader";
-import { pickNextPair } from "@/lib/decks/selector";
+import { pickPhraseProgressive } from "@/lib/decks/selector";
 import { getAnthropic, CLAUDE_MODEL } from "@/lib/providers/anthropic";
 import { SYSTEM_PROMPT, parseClaudeJson, type ClaudeDecision } from "./claude-prompt";
 
@@ -13,6 +13,11 @@ export type OrchestratorInput = {
   metaIntent: string | null;
   /** True when this is a tutor-mode retry on a single character, not a full-sentence attempt. */
   isRetry?: boolean;
+  /** The pair ID currently being practiced (so we don't pick the same one twice in a row). */
+  currentPairId?: string;
+  /** Comprehensible-input state: which pairs the learner has been introduced to + their mastery records. */
+  introducedIds?: string[];
+  mastery?: Record<string, Mastery>;
   mock?: boolean;
 };
 
@@ -21,6 +26,10 @@ export type OrchestratorOutput = {
   aiUtterance?: Phrase & { audioUrl: string };
   /** What the user should say next. Used as the reference text for Azure pronunciation scoring. */
   expectedUserResponse?: Phrase;
+  /** Which deck pair this turn is about — needed for client-side mastery tracking. */
+  pairId?: string;
+  /** True when this pair is being introduced for the first time. */
+  isNewPhrase?: boolean;
   /**
    * - "conversation": pass; advance to next phrase (aiUtterance set if AI speaks next).
    * - "tutor": user mostly said the phrase but a specific word was off → drill that word.
@@ -79,20 +88,26 @@ async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorO
   const filtered = input.activeDeckIds.length > 0
     ? decks.filter((d) => input.activeDeckIds.includes(d.deck.id))
     : decks;
-  const pair = pickNextPair(filtered.length > 0 ? filtered : decks, {
-    seenIds: input.history.filter((t) => t.speaker === "ai").map((t) => t.text),
+  const { pair, isNew } = pickPhraseProgressive(filtered.length > 0 ? filtered : decks, {
+    introducedIds: input.introducedIds ?? [],
+    mastery: input.mastery ?? {},
+    avoidId: input.currentPairId,
   });
 
   // For Q/A pairs, flip the role half the time so the user practices both
   // answering (AI asks q → user says a) and asking (AI says a → user says q).
   // Statement-only pairs (e.g. "thank you") always have user repeat the statement.
-  const flipRole = pair.q && pair.a && Math.random() < 0.5;
+  // Newly-introduced pairs are NOT flipped — easier for the learner to encounter
+  // a new phrase in its natural q→a direction first.
+  const flipRole = !isNew && pair.q && pair.a && Math.random() < 0.5;
   const aiSays = flipRole ? pair.a! : (pair.q ?? pair.statement!);
   const userSays = flipRole ? pair.q! : (pair.a ?? pair.statement ?? aiSays);
 
   return {
     speakerNext: "ai",
     routeTo: "conversation",
+    pairId: pair.id,
+    isNewPhrase: isNew,
     aiUtterance: {
       hanzi: aiSays.hanzi,
       pinyin: aiSays.pinyin,

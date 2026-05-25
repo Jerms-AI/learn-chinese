@@ -45,12 +45,21 @@ export default function Page() {
         lastUserScore: null,
         activeDeckIds: [],
         metaIntent,
+        currentPairId: state.currentPairId,
+        introducedIds: state.introducedIds,
+        mastery: state.mastery,
       });
       if (out.aiUtterance) {
         const url = await postTts(out.aiUtterance.hanzi);
         setAudioUrl(url);
         await playAudio(url);
-        dispatch({ type: "AI_SPOKE", utterance: out.aiUtterance, expectedResponse: out.expectedUserResponse });
+        dispatch({
+          type: "AI_SPOKE",
+          utterance: out.aiUtterance,
+          expectedResponse: out.expectedUserResponse,
+          pairId: out.pairId,
+          isNewPhrase: out.isNewPhrase,
+        });
       }
     } finally { setBusy(false); }
   }
@@ -79,10 +88,13 @@ export default function Page() {
       if (inTutor) setTutorAttempt(scoreShape);
       else setLastScore(scoreShape);
 
+      // Pass criterion for mastery tracking: same bar as full-sentence orchestrator routing.
+      const passed = !inTutor && scoreShape.accuracy >= 80 && scoreShape.tonesOk && scoreShape.completeness >= 50;
       dispatch({
         type: "USER_UTTERANCE",
         transcript: score.transcript,
         score: scoreShape,
+        passed,
       });
       const out = await fetchTurn({
         history: state.history,
@@ -90,6 +102,9 @@ export default function Page() {
         activeDeckIds: [],
         metaIntent: null,
         isRetry: inTutor,
+        currentPairId: state.currentPairId,
+        introducedIds: state.introducedIds,
+        mastery: state.mastery,
       });
 
       if (out.routeTo === "tutor" && out.tutorPayload) {
@@ -117,7 +132,13 @@ export default function Page() {
         const url = await postTts(out.aiUtterance.hanzi);
         setAudioUrl(url);
         await playAudio(url);
-        dispatch({ type: "AI_SPOKE", utterance: out.aiUtterance, expectedResponse: out.expectedUserResponse });
+        dispatch({
+          type: "AI_SPOKE",
+          utterance: out.aiUtterance,
+          expectedResponse: out.expectedUserResponse,
+          pairId: out.pairId,
+          isNewPhrase: out.isNewPhrase,
+        });
       }
     } finally { setBusy(false); }
   }
@@ -125,7 +146,18 @@ export default function Page() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-12 space-y-8">
       <header className="flex items-baseline justify-between">
-        <h1 className="font-serif text-3xl">学中文</h1>
+        <div>
+          <h1 className="font-serif text-3xl">学中文</h1>
+          {state.introducedIds.length > 0 && (
+            <p className="text-xs text-ink-soft mt-1">
+              {state.introducedIds.length} {state.introducedIds.length === 1 ? "phrase" : "phrases"} introduced
+              {(() => {
+                const mastered = state.introducedIds.filter((id) => (state.mastery[id]?.streak ?? 0) >= 3).length;
+                return mastered > 0 ? ` · ${mastered} mastered` : "";
+              })()}
+            </p>
+          )}
+        </div>
         <button onClick={() => aiTurn()} disabled={busy} className="text-sm underline">
           {state.mode === "idle" ? "Start" : "Skip to next"}
         </button>
@@ -136,6 +168,9 @@ export default function Page() {
           phrase={state.pendingPhrase}
           expectedResponse={state.expectedResponse}
           lastScore={lastScore}
+          isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
+          streak={state.currentPairId ? state.mastery[state.currentPairId]?.streak ?? 0 : 0}
+          masteryThreshold={3}
           onReplay={() => audioUrl && playAudio(audioUrl)}
         />
       )}
