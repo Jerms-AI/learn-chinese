@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { synthesizeMandarin } from "@/lib/providers/azure-tts";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   const { text } = await req.json();
-  const useMock = !process.env.AZURE_SPEECH_KEY;
-  if (useMock) {
+  if (!text) return NextResponse.json({ error: "text required" }, { status: 400 });
+
+  if (!process.env.AZURE_SPEECH_KEY) {
     const bytes = await readFile(path.join(process.cwd(), "public", "mocks", "silence.mp3"));
-    return new NextResponse(bytes, {
-      headers: {
-        "Content-Type": "audio/mpeg",
-        "X-TTS-Mode": "mock",
-        "X-TTS-Text": encodeURIComponent(text ?? ""),
-      },
-    });
+    return new NextResponse(bytes, { headers: { "Content-Type": "audio/mpeg", "X-TTS-Mode": "mock" } });
   }
-  return NextResponse.json({ error: "Azure TTS not yet implemented" }, { status: 501 });
+
+  const audio = await synthesizeMandarin(text);
+  return new NextResponse(new Uint8Array(audio), { headers: { "Content-Type": "audio/mpeg" } });
 }
