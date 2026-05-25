@@ -6,7 +6,7 @@ import { ConversationRail } from "@/components/ConversationRail";
 import { MetaBar } from "@/components/MetaBar";
 import { TutorPanel, type TutorPayload } from "@/components/TutorPanel";
 import { applyEvent, initialState, type Score } from "@/lib/conversation/state";
-import { saveState, loadState } from "@/lib/conversation/persistence";
+import { saveState, loadState, clearState } from "@/lib/conversation/persistence";
 import { fetchTurn, postScore, postTts } from "@/lib/api-client";
 
 function reducer(s: ReturnType<typeof initialState>, e: Parameters<typeof applyEvent>[1]) {
@@ -158,9 +158,27 @@ export default function Page() {
             </p>
           )}
         </div>
-        <button onClick={() => aiTurn()} disabled={busy} className="text-sm underline">
-          {state.mode === "idle" ? "Start" : "Skip to next"}
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => {
+              if (confirm("Reset all progress (mastery, history, introduced phrases)?")) {
+                clearState();
+                setLastScore(null);
+                setTutor(null);
+                setTutorAttempt(null);
+                setRetryHint(null);
+                dispatch({ type: "RESET" });
+              }
+            }}
+            disabled={busy}
+            className="text-xs text-ink-soft underline hover:text-ink"
+          >
+            reset
+          </button>
+          <button onClick={() => aiTurn()} disabled={busy} className="text-sm underline">
+            {state.mode === "idle" ? "Start" : "Skip to next"}
+          </button>
+        </div>
       </header>
 
       {state.pendingPhrase && (
