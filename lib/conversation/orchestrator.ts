@@ -27,6 +27,9 @@ export type OrchestratorOutput = {
   speakerNext: "ai" | "user";
   /** Optional free-form natural response from the AI, played BEFORE the scripted aiUtterance. */
   aiResponse?: Phrase;
+  /** When the user just spoke free-form, the orchestrator returns the user's transcript
+   * augmented with pinyin + english translation — shown in "your line" on the card. */
+  userAugmented?: Phrase;
   aiUtterance?: Phrase & { audioUrl: string };
   /** What the user should say next. Used as the reference text for Azure pronunciation scoring. */
   expectedUserResponse?: Phrase;
@@ -156,25 +159,40 @@ type FreeFormContext = {
   prevUserAnswer: string | null;
 };
 
-async function generateFreeFormReply(ctx: FreeFormContext): Promise<Phrase | undefined> {
+type FreeFormResult = {
+  /** What the user said, augmented with pinyin + english translation. */
+  userAugmented?: Phrase;
+  /** The AI's natural reply (with optional segue to the next scripted Q). */
+  aiReply?: Phrase;
+};
+
+async function generateFreeFormReply(ctx: FreeFormContext): Promise<FreeFormResult> {
   try {
     const client = getAnthropic();
     const resp = await client.messages.create({
       model: CLAUDE_MODEL,
       max_tokens: 350,
-      system: `You are a friendly Mandarin tutor responding to a user's free-form question or statement in Mandarin. After your reply, the system plays a scripted practice question (nextScriptedQ) which the user should answer with nextExpectedResponse.
+      system: `You are a friendly Mandarin tutor. The user just said something free-form in Mandarin (transcribed as userSaid). After your reply, the system plays a scripted practice question (nextScriptedQ) which the user should answer with nextExpectedResponse.
 
-Rules:
-1. Respond in ONE OR TWO short Mandarin sentences — like a friend, not a lecturer.
-2. Your response MUST be a statement. Do NOT ask the user any question — the scripted Q comes next.
+You MUST return TWO things in your JSON:
+1. user: pinyin + english translation of what the user said (userSaid is hanzi only from Azure — give the matching pinyin with tone marks and a faithful English translation).
+2. reply: your one-to-two-sentence Mandarin response to the user.
+
+Rules for the reply:
+1. ONE or TWO short Mandarin sentences — like a friend, not a lecturer.
+2. Your reply MUST be a statement. Do NOT ask the user any question — the scripted Q comes next.
 3. Do NOT include or paraphrase the scripted Q itself.
 4. SEGUE NATURALLY toward the next scripted Q's topic:
-   - Normal case (new topic): end with one short statement mentioning the topic. e.g. user: "你好吗?" + nextScriptedQ: "你是美国人吗?" → "我很好，谢谢。我还没去过美国。"
-   - SAME-QUESTION-DIFFERENT-ANSWER case: if nextScriptedQ closely resembles prevScriptedQ but nextExpectedResponse differs from prevUserAnswer (Pimsleur teaches multiple variant answers), frame the segue as a scenario shift so the user knows to give a different answer. e.g. prev: "你会说英文吗?" / user said "我会说一点儿" / next: "你会说英文吗?" / expected: "我不会说英文" → "好。现在想象另一种情况，别人完全不会英文。" (OK. Now imagine a different scenario — someone who doesn't speak English at all.)
-   - For variations (greeting changes, polite vs. casual), say something like "好的。我换一种问法。" (Good. Let me ask in a different way.)
-5. Don't pile on context; keep total reply to two short sentences max.
+   - Normal case (new topic): end with one short statement mentioning the topic. e.g. user: "你好吗?" + nextScriptedQ: "你是美国人吗?" → reply: "我很好，谢谢。我还没去过美国。"
+   - SAME-QUESTION-DIFFERENT-ANSWER case: if nextScriptedQ closely resembles prevScriptedQ but nextExpectedResponse differs from prevUserAnswer (Pimsleur teaches multiple variant answers), frame the segue as a scenario shift so the user knows to give a different answer. e.g. prev: "你会说英文吗?" / user said "我会说一点儿" / next: "你会说英文吗?" / expected: "我不会说英文" → reply: "好。现在想象另一种情况，别人完全不会英文。"
+   - For minor variations (greeting changes, polite vs. casual), reply with something like "好的。我换一种问法。"
+5. Keep total reply to two short sentences max.
 
-Output ONLY a JSON object: {"hanzi": "...", "pinyin": "...", "english": "..."}`,
+Output ONLY this JSON shape (no markdown):
+{
+  "user": { "pinyin": "...", "english": "..." },
+  "reply": { "hanzi": "...", "pinyin": "...", "english": "..." }
+}`,
       messages: [{
         role: "user",
         content: JSON.stringify({
@@ -189,12 +207,20 @@ Output ONLY a JSON object: {"hanzi": "...", "pinyin": "...", "english": "..."}`,
     });
     const textBlock = resp.content.find((b) => b.type === "text") as { type: "text"; text: string } | undefined;
     const cleaned = (textBlock?.text ?? "").replace(/```json\s*/g, "").replace(/```\s*$/g, "").trim();
-    const parsed = JSON.parse(cleaned) as Phrase;
-    if (parsed.hanzi && parsed.pinyin && parsed.english) return parsed;
+    const parsed = JSON.parse(cleaned) as {
+      user?: { pinyin?: string; english?: string };
+      reply?: { hanzi?: string; pinyin?: string; english?: string };
+    };
+    const userAugmented = parsed.user?.pinyin && parsed.user?.english
+      ? { hanzi: ctx.userTranscript, pinyin: parsed.user.pinyin, english: parsed.user.english }
+      : undefined;
+    const aiReply = parsed.reply?.hanzi && parsed.reply?.pinyin && parsed.reply?.english
+      ? { hanzi: parsed.reply.hanzi, pinyin: parsed.reply.pinyin, english: parsed.reply.english }
+      : { hanzi: "好。", pinyin: "hǎo.", english: "OK." };
+    return { userAugmented, aiReply };
   } catch {
-    // fall through to default
+    return { aiReply: { hanzi: "好。", pinyin: "hǎo.", english: "OK." } };
   }
-  return { hanzi: "好。", pinyin: "hǎo.", english: "OK." };
 }
 
 const FULL_PASS_THRESHOLD = 80;
@@ -237,7 +263,7 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
   const prevScriptedQ = prevAiTurn?.speaker === "ai" ? prevAiTurn.phrase : null;
   const prevUserAnswer = prevUserTurn?.speaker === "user" ? prevUserTurn.text : null;
 
-  const aiResponse = input.userFreeFormTranscript
+  const freeFormResult = input.userFreeFormTranscript
     ? await generateFreeFormReply({
         userTranscript: input.userFreeFormTranscript,
         recentHistory: input.history,
@@ -253,7 +279,8 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
     routeTo: "conversation",
     pairId: pair.id,
     isNewPhrase: isNew,
-    aiResponse,
+    aiResponse: freeFormResult?.aiReply,
+    userAugmented: freeFormResult?.userAugmented,
     aiUtterance: {
       hanzi: aiSays.hanzi,
       pinyin: aiSays.pinyin,

@@ -21,6 +21,7 @@ export default function Page() {
   const [tutorAttempt, setTutorAttempt] = useState<Score | null>(null);
   const [retryHint, setRetryHint] = useState<string | null>(null);
   const [hideTranslations, setHideTranslations] = useState(false);
+  const [userFreeFormPhrase, setUserFreeFormPhrase] = useState<{ hanzi: string; pinyin: string; english: string } | null>(null);
   const [decks, setDecks] = useState<Array<{ id: string; title: string; pairCount: number }>>([]);
   const [selectedDeckId, setSelectedDeckId] = useState<string>("all");
   const hydratedRef = useRef(false);
@@ -135,6 +136,10 @@ export default function Page() {
           mastery: state.mastery,
           userFreeFormTranscript: transcript,
         });
+        // Capture Claude's augmented version of what the user said (pinyin + english).
+        if (out.userAugmented) {
+          setUserFreeFormPhrase(out.userAugmented);
+        }
         // Pre-fetch each utterance's TTS BEFORE dispatching the UI update, so
         // text + audio land together (no silent gap while Azure synthesizes).
         if (out.aiResponse) {
@@ -145,6 +150,7 @@ export default function Page() {
         }
         if (out.aiUtterance) {
           setLastScore(null);
+          setUserFreeFormPhrase(null); // clear once we transition to next scripted Q
           const url = await prefetchTts(out.aiUtterance.hanzi);
           dispatch({
             type: "AI_SPOKE",
@@ -327,7 +333,7 @@ export default function Page() {
                 latestTier={latest}
                 hideTranslations={hideTranslations}
                 isFreeForm={isFreeForm}
-                userJustAsked={state.lastUserFreeForm}
+                userJustAsked={userFreeFormPhrase}
                 onToggleTranslations={() => setHideTranslations((v) => !v)}
                 onReplay={() => audioUrl && playAudio(audioUrl)}
               />

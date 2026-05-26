@@ -69,9 +69,9 @@ export function PhraseCard({
   /** When true, the "your line" section shows an "ask a question" prompt instead
    * of the scripted response — the loop is waiting for free-form input. */
   isFreeForm?: boolean;
-  /** The user's most recent free-form question (transcribed). When set, shown
-   * above "they said" so the user can see what Azure heard. */
-  userJustAsked?: string;
+  /** The user's most recent free-form question — hanzi + pinyin + english.
+   * When set, takes over the "your line" slot so the user sees what was heard. */
+  userJustAsked?: Phrase | null;
   onReplay?: () => void;
 }) {
   const showsAnswer = expectedResponse && expectedResponse.hanzi !== phrase.hanzi;
@@ -96,13 +96,6 @@ export function PhraseCard({
         )}
       </div>
 
-      {userJustAsked && (
-        <div className="mb-6 pb-4 border-b border-dashed text-center">
-          <div className="text-xs uppercase tracking-widest text-ink-soft mb-1">you asked</div>
-          <div className="font-serif text-xl">{userJustAsked}</div>
-        </div>
-      )}
-
       <div className="text-center">
         <div className="text-xs uppercase tracking-widest text-ink-soft mb-3">they said</div>
         <div className="font-serif text-6xl leading-tight tracking-wide">{phrase.hanzi}</div>
@@ -125,19 +118,23 @@ export function PhraseCard({
         )}
       </div>
 
-      {(showsAnswer || isFreeForm) && (
+      {(showsAnswer || isFreeForm || userJustAsked) && (
         <div
           className={`mt-8 pt-6 px-4 pb-4 -mx-4 border-t border-dashed text-center rounded-md transition-colors ${
             isFreeForm ? "bg-terracotta/5 ring-1 ring-terracotta/20" :
+            userJustAsked ? "bg-ink-soft/5 ring-1 ring-ink-soft/15" :
             lastScore && latestTier ? `${TIER_TINT_BG[latestTier]} ring-1 ${TIER_RING[latestTier]}` : ""
           }`}
         >
           <div className="flex items-center justify-center gap-3 mb-3">
             <span className="text-xs uppercase tracking-widest text-terracotta">your line</span>
-            {!isFreeForm && lastScore && (
+            {!isFreeForm && !userJustAsked && lastScore && (
               <span className={`text-xs font-medium ${accuracyColor(lastScore.accuracy)}`}>
                 overall {lastScore.accuracy} · tones {lastScore.tonesOk ? "✓" : "✗"}
               </span>
+            )}
+            {userJustAsked && (
+              <span className="text-xs italic text-ink-soft">(free-form — not graded)</span>
             )}
           </div>
           {isFreeForm ? (
@@ -147,6 +144,18 @@ export function PhraseCard({
                 Ask me anything in Mandarin — hold space and speak.
               </div>
             </div>
+          ) : userJustAsked ? (
+            <>
+              <div className="font-serif text-4xl leading-tight">{userJustAsked.hanzi}</div>
+              {!hideTranslations && (
+                <>
+                  <div className="mt-2 text-lg">
+                    <TonedPinyin text={userJustAsked.pinyin} />
+                  </div>
+                  <div className="mt-1 text-sm text-ink-soft">{userJustAsked.english}</div>
+                </>
+              )}
+            </>
           ) : (
             <>
               {lastScore ? (
