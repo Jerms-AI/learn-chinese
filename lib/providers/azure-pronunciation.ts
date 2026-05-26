@@ -30,7 +30,10 @@ export function parseAzureResponse(raw: AzureResponse, transcript: string): Norm
     accuracy: w.PronunciationAssessment?.AccuracyScore ?? w.AccuracyScore ?? 0,
     tone: undefined as number | undefined,
   }));
-  const tonesOk = words.every((w) => w.accuracy >= 60);
+  // Heuristic: any single character below 40 is genuinely off. 你好 (3-3 sandhi) often dips to ~50
+  // on Azure's per-word scoring even for native speakers, so we keep this lenient.
+  // TODO(phase-10): use Azure's phoneme-level Tone errors instead of word-accuracy proxy.
+  const tonesOk = words.every((w) => w.accuracy >= 40);
   return {
     accuracy: raw.AccuracyScore ?? 0,
     fluency: raw.FluencyScore ?? 0,

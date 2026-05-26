@@ -1,0 +1,93 @@
+deck:
+  id: pimsleur-l4
+  title: Pimsleur Mandarin IV — starter
+  source: starter coverage of Pimsleur Mandarin Level 4 topics; expand as needed
+
+pairs:
+  - id: pim-l4-001
+    q:
+      hanzi: 你能不能帮我？
+      pinyin: nǐ néng bu néng bāng wǒ?
+      english: Can you help me?
+    a:
+      hanzi: 当然，没问题。
+      pinyin: dāngrán, méi wèntí.
+      english: Of course, no problem.
+    tags: [lesson-1, requests]
+
+  - id: pim-l4-002
+    q:
+      hanzi: 这个用中文怎么说？
+      pinyin: zhège yòng zhōngwén zěnme shuō?
+      english: How do you say this in Chinese?
+    a:
+      hanzi: 让我想想。
+      pinyin: ràng wǒ xiǎngxiang.
+      english: Let me think.
+    tags: [lesson-2, language]
+
+  - id: pim-l4-003
+    q:
+      hanzi: 你比较喜欢哪个？
+      pinyin: nǐ bǐjiào xǐhuan nǎ ge?
+      english: Which one do you prefer?
+    a:
+      hanzi: 我比较喜欢这个。
+      pinyin: wǒ bǐjiào xǐhuan zhège.
+      english: I prefer this one.
+    tags: [lesson-3, preferences]
+
+  - id: pim-l4-004
+    q:
+      hanzi: 你以前来过吗？
+      pinyin: nǐ yǐqián lái guo ma?
+      english: Have you been here before?
+    a:
+      hanzi: 这是我第一次。
+      pinyin: zhè shì wǒ dì-yī cì.
+      english: This is my first time.
+    tags: [lesson-4, experience]
+
+  - id: pim-l4-005
+    q:
+      hanzi: 我可以试试吗？
+      pinyin: wǒ kěyǐ shìshi ma?
+      english: May I try?
+    a:
+      hanzi: 当然，请试试。
+      pinyin: dāngrán, qǐng shìshi.
+      english: Of course, please try.
+    tags: [lesson-5, requests]
+
+  - id: pim-l4-006
+    q:
+      hanzi: 你觉得怎么办比较好？
+      pinyin: nǐ juéde zěnme bàn bǐjiào hǎo?
+      english: What do you think is the best way?
+    a:
+      hanzi: 我觉得应该再等等。
+      pinyin: wǒ juéde yīnggāi zài děngdeng.
+      english: I think we should wait a bit longer.
+    tags: [lesson-6, opinion]
+
+  - id: pim-l4-007
+    q:
+      hanzi: 你常常出差吗？
+      pinyin: nǐ chángcháng chūchāi ma?
+      english: Do you travel for work often?
+    a:
+      hanzi: 一个月一两次。
+      pinyin: yí ge yuè yī liǎng cì.
+      english: Once or twice a month.
+    tags: [lesson-7, work, travel]
+
+  - id: pim-l4-008
+    q:
+      hanzi: 这件事很重要。
+      pinyin: zhè jiàn shì hěn zhòngyào.
+      english: This matter is very important.
+    a:
+      hanzi: 我马上就办。
+      pinyin: wǒ mǎshàng jiù bàn.
+      english: I'll take care of it right away.
+    tags: [lesson-8, work]

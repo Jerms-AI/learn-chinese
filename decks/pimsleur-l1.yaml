@@ -1,0 +1,365 @@
+deck:
+  id: pimsleur-l1
+  title: Pimsleur Mandarin I — Lessons 1–10
+  source: reconstructed from Pimsleur Mandarin Level 1 curriculum (lessons 1–10) for personal study
+
+# Each pair is tagged with its lesson number. Use the orchestrator to scope to a
+# subset (e.g., active deck filter by lesson tags) once that feature lands.
+
+pairs:
+  # ── Lesson 1: Excuse me / Do you speak English? / American ───────────────
+  - id: pim-l1-001
+    q:
+      hanzi: 对不起，你会说英文吗？
+      pinyin: duìbuqǐ, nǐ huì shuō yīngwén ma?
+      english: Excuse me, can you speak English?
+    a:
+      hanzi: 我会说一点儿。
+      pinyin: wǒ huì shuō yìdiǎnr.
+      english: I can speak a little.
+    tags: [lesson-1, english]
+
+  - id: pim-l1-002
+    q:
+      hanzi: 你会说英文吗？
+      pinyin: nǐ huì shuō yīngwén ma?
+      english: Can you speak English?
+    a:
+      hanzi: 我不会说英文。
+      pinyin: wǒ bù huì shuō yīngwén.
+      english: I cannot speak English.
+    tags: [lesson-1, english]
+
+  - id: pim-l1-003
+    q:
+      hanzi: 你是美国人吗？
+      pinyin: nǐ shì měiguó rén ma?
+      english: Are you American?
+    a:
+      hanzi: 是，我是美国人。
+      pinyin: shì, wǒ shì měiguó rén.
+      english: Yes, I am American.
+    tags: [lesson-1, identity]
+
+  - id: pim-l1-004
+    q:
+      hanzi: 你是美国人吗？
+      pinyin: nǐ shì měiguó rén ma?
+      english: Are you American?
+    a:
+      hanzi: 不是，我不是美国人。
+      pinyin: bù shì, wǒ bù shì měiguó rén.
+      english: No, I am not American.
+    tags: [lesson-1, identity]
+
+  # ── Lesson 2: Mandarin / Greetings ───────────────────────────────────────
+  - id: pim-l2-001
+    q:
+      hanzi: 你会说普通话吗？
+      pinyin: nǐ huì shuō pǔtōnghuà ma?
+      english: Can you speak Mandarin?
+    a:
+      hanzi: 我会说一点儿普通话。
+      pinyin: wǒ huì shuō yìdiǎnr pǔtōnghuà.
+      english: I can speak a little Mandarin.
+    tags: [lesson-2, mandarin]
+
+  - id: pim-l2-002
+    q:
+      hanzi: 你好吗？
+      pinyin: nǐ hǎo ma?
+      english: How are you?
+    a:
+      hanzi: 我很好，谢谢。
+      pinyin: wǒ hěn hǎo, xièxie.
+      english: I am very well, thank you.
+    tags: [lesson-2, greetings]
+
+  - id: pim-l2-003
+    q:
+      hanzi: 你好吗？
+      pinyin: nǐ hǎo ma?
+      english: How are you?
+    a:
+      hanzi: 不好。
+      pinyin: bù hǎo.
+      english: Not good.
+    tags: [lesson-2, greetings]
+
+  - id: pim-l2-004
+    statement:
+      hanzi: 谢谢。
+      pinyin: xièxie.
+      english: Thank you.
+    tags: [lesson-2, courtesy]
+
+  # ── Lesson 3: Chinese identity / "but" ───────────────────────────────────
+  - id: pim-l3-001
+    q:
+      hanzi: 你是中国人吗？
+      pinyin: nǐ shì zhōngguó rén ma?
+      english: Are you Chinese?
+    a:
+      hanzi: 不是，我是美国人。
+      pinyin: bù shì, wǒ shì měiguó rén.
+      english: No, I am American.
+    tags: [lesson-3, identity]
+
+  - id: pim-l3-002
+    q:
+      hanzi: 你会说一点儿普通话吗？
+      pinyin: nǐ huì shuō yìdiǎnr pǔtōnghuà ma?
+      english: Can you speak a little Mandarin?
+    a:
+      hanzi: 我是美国人，可是我会说一点儿普通话。
+      pinyin: wǒ shì měiguó rén, kěshì wǒ huì shuō yìdiǎnr pǔtōnghuà.
+      english: I am American, but I can speak a little Mandarin.
+    tags: [lesson-3, identity, mandarin]
+
+  # ── Lesson 4: Where / locations ──────────────────────────────────────────
+  - id: pim-l4-001
+    q:
+      hanzi: 请问，王府井路在哪儿？
+      pinyin: qǐng wèn, wángfǔjǐng lù zài nǎr?
+      english: Excuse me, where is Wangfujing Road?
+    a:
+      hanzi: 在那儿。
+      pinyin: zài nàr.
+      english: It is there.
+    tags: [lesson-4, directions]
+
+  - id: pim-l4-002
+    q:
+      hanzi: 请问，北京街在哪儿？
+      pinyin: qǐng wèn, běijīng jiē zài nǎr?
+      english: Excuse me, where is Beijing Street?
+    a:
+      hanzi: 在这儿。
+      pinyin: zài zhèr.
+      english: It is here.
+    tags: [lesson-4, directions]
+
+  - id: pim-l4-003
+    statement:
+      hanzi: 我不明白。
+      pinyin: wǒ bù míngbai.
+      english: I don't understand.
+    tags: [lesson-4, courtesy]
+
+  # ── Lesson 5: Want / eat / drink ─────────────────────────────────────────
+  - id: pim-l5-001
+    q:
+      hanzi: 您想吃什么？
+      pinyin: nín xiǎng chī shénme?
+      english: What do you want to eat?
+    a:
+      hanzi: 我想吃东西。
+      pinyin: wǒ xiǎng chī dōngxi.
+      english: I want to eat something.
+    tags: [lesson-5, food]
+
+  - id: pim-l5-002
+    q:
+      hanzi: 您想喝什么？
+      pinyin: nín xiǎng hē shénme?
+      english: What do you want to drink?
+    a:
+      hanzi: 我想喝咖啡。
+      pinyin: wǒ xiǎng hē kāfēi.
+      english: I want to drink coffee.
+    tags: [lesson-5, drink]
+
+  - id: pim-l5-003
+    q:
+      hanzi: 你想喝咖啡吗？
+      pinyin: nǐ xiǎng hē kāfēi ma?
+      english: Do you want to drink coffee?
+    a:
+      hanzi: 我也想喝咖啡。
+      pinyin: wǒ yě xiǎng hē kāfēi.
+      english: I also want to drink coffee.
+    tags: [lesson-5, drink]
+
+  # ── Lesson 6: Coffee or tea / cups / Miss Wang ───────────────────────────
+  - id: pim-l6-001
+    q:
+      hanzi: 你想喝咖啡还是茶？
+      pinyin: nǐ xiǎng hē kāfēi háishi chá?
+      english: Do you want coffee or tea?
+    a:
+      hanzi: 我想喝茶。
+      pinyin: wǒ xiǎng hē chá.
+      english: I want to drink tea.
+    tags: [lesson-6, drink]
+
+  - id: pim-l6-002
+    q:
+      hanzi: 你想要几杯？
+      pinyin: nǐ xiǎng yào jǐ bēi?
+      english: How many cups do you want?
+    a:
+      hanzi: 两杯，谢谢。
+      pinyin: liǎng bēi, xièxie.
+      english: Two cups, thank you.
+    tags: [lesson-6, drink]
+
+  - id: pim-l6-003
+    q:
+      hanzi: 王小姐，你想吃午饭吗？
+      pinyin: wáng xiǎojiě, nǐ xiǎng chī wǔfàn ma?
+      english: Miss Wang, do you want to eat lunch?
+    a:
+      hanzi: 是，我想吃午饭。
+      pinyin: shì, wǒ xiǎng chī wǔfàn.
+      english: Yes, I want to eat lunch.
+    tags: [lesson-6, food]
+
+  # ── Lesson 7: Time / now / beer ──────────────────────────────────────────
+  - id: pim-l7-001
+    q:
+      hanzi: 现在几点钟？
+      pinyin: xiànzài jǐ diǎn zhōng?
+      english: What time is it now?
+    a:
+      hanzi: 现在八点钟。
+      pinyin: xiànzài bā diǎn zhōng.
+      english: It is eight o'clock now.
+    tags: [lesson-7, time]
+
+  - id: pim-l7-002
+    q:
+      hanzi: 你什么时候想吃饭？
+      pinyin: nǐ shénme shíhou xiǎng chīfàn?
+      english: When do you want to eat?
+    a:
+      hanzi: 一会儿。
+      pinyin: yíhuìr.
+      english: In a little while.
+    tags: [lesson-7, time, food]
+
+  - id: pim-l7-003
+    q:
+      hanzi: 你想喝啤酒吗？
+      pinyin: nǐ xiǎng hē píjiǔ ma?
+      english: Do you want to drink beer?
+    a:
+      hanzi: 不，现在不行。
+      pinyin: bù, xiànzài bù xíng.
+      english: No, not now.
+    tags: [lesson-7, drink]
+
+  # ── Lesson 8: Eat together / Mr. Li / tonight ────────────────────────────
+  - id: pim-l8-001
+    q:
+      hanzi: 你想跟我一起吃饭吗？
+      pinyin: nǐ xiǎng gēn wǒ yìqǐ chīfàn ma?
+      english: Do you want to eat with me?
+    a:
+      hanzi: 好，我想跟你一起吃饭。
+      pinyin: hǎo, wǒ xiǎng gēn nǐ yìqǐ chīfàn.
+      english: OK, I want to eat with you.
+    tags: [lesson-8, food, social]
+
+  - id: pim-l8-002
+    q:
+      hanzi: 李先生，你今天晚上想吃什么？
+      pinyin: lǐ xiānsheng, nǐ jīntiān wǎnshang xiǎng chī shénme?
+      english: Mr. Li, what do you want to eat tonight?
+    a:
+      hanzi: 我想吃中国菜。
+      pinyin: wǒ xiǎng chī zhōngguó cài.
+      english: I want to eat Chinese food.
+    tags: [lesson-8, food]
+
+  - id: pim-l8-003
+    q:
+      hanzi: 明天晚上你想跟我一起吃晚饭吗？
+      pinyin: míngtiān wǎnshang nǐ xiǎng gēn wǒ yìqǐ chī wǎnfàn ma?
+      english: Do you want to eat dinner with me tomorrow night?
+    a:
+      hanzi: 好，明天晚上一起吃晚饭。
+      pinyin: hǎo, míngtiān wǎnshang yìqǐ chī wǎnfàn.
+      english: Good, let's eat dinner together tomorrow night.
+    tags: [lesson-8, food, social]
+
+  # ── Lesson 9: Numbers / money ────────────────────────────────────────────
+  - id: pim-l9-001
+    statement:
+      hanzi: 一，二，三，四，五。
+      pinyin: yī, èr, sān, sì, wǔ.
+      english: One, two, three, four, five.
+    tags: [lesson-9, numbers]
+
+  - id: pim-l9-002
+    statement:
+      hanzi: 六，七，八，九，十。
+      pinyin: liù, qī, bā, jiǔ, shí.
+      english: Six, seven, eight, nine, ten.
+    tags: [lesson-9, numbers]
+
+  - id: pim-l9-003
+    q:
+      hanzi: 多少钱？
+      pinyin: duōshao qián?
+      english: How much money?
+    a:
+      hanzi: 八块钱。
+      pinyin: bā kuài qián.
+      english: Eight yuan.
+    tags: [lesson-9, money]
+
+  - id: pim-l9-004
+    q:
+      hanzi: 这个多少钱？
+      pinyin: zhège duōshao qián?
+      english: How much is this?
+    a:
+      hanzi: 八块人民币。
+      pinyin: bā kuài rénmínbì.
+      english: Eight RMB.
+    tags: [lesson-9, money]
+
+  # ── Lesson 10: Buying / US dollars ───────────────────────────────────────
+  - id: pim-l10-001
+    q:
+      hanzi: 你想买什么？
+      pinyin: nǐ xiǎng mǎi shénme?
+      english: What do you want to buy?
+    a:
+      hanzi: 我想买报纸。
+      pinyin: wǒ xiǎng mǎi bàozhǐ.
+      english: I want to buy a newspaper.
+    tags: [lesson-10, buying]
+
+  - id: pim-l10-002
+    q:
+      hanzi: 你有美金吗？
+      pinyin: nǐ yǒu měijīn ma?
+      english: Do you have US dollars?
+    a:
+      hanzi: 我有美金。
+      pinyin: wǒ yǒu měijīn.
+      english: I have US dollars.
+    tags: [lesson-10, money]
+
+  - id: pim-l10-003
+    q:
+      hanzi: 这顶帽子多少钱？
+      pinyin: zhè dǐng màozi duōshao qián?
+      english: How much is this hat?
+    a:
+      hanzi: 三十五美金。
+      pinyin: sānshíwǔ měijīn.
+      english: Thirty-five US dollars.
+    tags: [lesson-10, money, buying]
+
+  - id: pim-l10-004
+    q:
+      hanzi: 现在去好吗？
+      pinyin: xiànzài qù hǎo ma?
+      english: Is it OK to go now?
+    a:
+      hanzi: 太晚了。
+      pinyin: tài wǎn le.
+      english: It's too late.
+    tags: [lesson-10, time]

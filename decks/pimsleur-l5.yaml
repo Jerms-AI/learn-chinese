@@ -1,0 +1,93 @@
+deck:
+  id: pimsleur-l5
+  title: Pimsleur Mandarin V — starter
+  source: starter coverage of Pimsleur Mandarin Level 5 topics; expand as needed
+
+pairs:
+  - id: pim-l5-001
+    q:
+      hanzi: 你对中国文化感兴趣吗？
+      pinyin: nǐ duì zhōngguó wénhuà gǎn xìngqù ma?
+      english: Are you interested in Chinese culture?
+    a:
+      hanzi: 我非常感兴趣。
+      pinyin: wǒ fēicháng gǎn xìngqù.
+      english: I'm very interested.
+    tags: [lesson-1, culture]
+
+  - id: pim-l5-002
+    q:
+      hanzi: 你认为未来会怎么样？
+      pinyin: nǐ rènwéi wèilái huì zěnmeyàng?
+      english: What do you think the future will be like?
+    a:
+      hanzi: 我觉得很难说。
+      pinyin: wǒ juéde hěn nán shuō.
+      english: I think it's hard to say.
+    tags: [lesson-2, opinion]
+
+  - id: pim-l5-003
+    q:
+      hanzi: 你能不能再说一遍？
+      pinyin: nǐ néng bu néng zài shuō yí biàn?
+      english: Could you say that one more time?
+    a:
+      hanzi: 当然，我说慢一点。
+      pinyin: dāngrán, wǒ shuō màn yìdiǎn.
+      english: Of course, I'll speak a bit slower.
+    tags: [lesson-3, language]
+
+  - id: pim-l5-004
+    q:
+      hanzi: 你认识他多长时间了？
+      pinyin: nǐ rènshi tā duō cháng shíjiān le?
+      english: How long have you known him?
+    a:
+      hanzi: 差不多十年了。
+      pinyin: chàbuduō shí nián le.
+      english: Almost ten years now.
+    tags: [lesson-4, relationships]
+
+  - id: pim-l5-005
+    q:
+      hanzi: 你的看法跟我的不一样。
+      pinyin: nǐ de kànfǎ gēn wǒ de bù yíyàng.
+      english: Your view is different from mine.
+    a:
+      hanzi: 每个人都有自己的看法。
+      pinyin: měi ge rén dōu yǒu zìjǐ de kànfǎ.
+      english: Everyone has their own view.
+    tags: [lesson-5, opinion]
+
+  - id: pim-l5-006
+    q:
+      hanzi: 你考虑过这个问题吗？
+      pinyin: nǐ kǎolǜ guo zhège wèntí ma?
+      english: Have you considered this question?
+    a:
+      hanzi: 考虑了很久。
+      pinyin: kǎolǜ le hěn jiǔ.
+      english: I've thought about it for a long time.
+    tags: [lesson-6, opinion]
+
+  - id: pim-l5-007
+    q:
+      hanzi: 我们需要做出决定。
+      pinyin: wǒmen xūyào zuò chū juédìng.
+      english: We need to make a decision.
+    a:
+      hanzi: 让我们再讨论一下。
+      pinyin: ràng wǒmen zài tǎolùn yíxià.
+      english: Let's discuss it a bit more.
+    tags: [lesson-7, decisions]
+
+  - id: pim-l5-008
+    q:
+      hanzi: 我希望我们以后还有机会见面。
+      pinyin: wǒ xīwàng wǒmen yǐhòu hái yǒu jīhuì jiànmiàn.
+      english: I hope we'll have a chance to meet again.
+    a:
+      hanzi: 我也这么希望。
+      pinyin: wǒ yě zhème xīwàng.
+      english: I hope so too.
+    tags: [lesson-8, farewells]

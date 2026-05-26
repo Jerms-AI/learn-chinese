@@ -1,8 +1,8 @@
 import path from "node:path";
-import type { Turn, Score } from "./state";
+import type { Turn, Score, Mastery } from "./state";
 import type { Phrase } from "@/lib/decks/schema";
 import { loadAllDecks } from "@/lib/decks/loader";
-import { pickNextPair } from "@/lib/decks/selector";
+import { pickPhraseProgressive } from "@/lib/decks/selector";
 import { getAnthropic, CLAUDE_MODEL } from "@/lib/providers/anthropic";
 import { SYSTEM_PROMPT, parseClaudeJson, type ClaudeDecision } from "./claude-prompt";
 
@@ -11,32 +11,73 @@ export type OrchestratorInput = {
   lastUserScore: Score | null;
   activeDeckIds: string[];
   metaIntent: string | null;
+  /** True when this is a tutor-mode retry on a single character, not a full-sentence attempt. */
+  isRetry?: boolean;
+  /** The pair ID currently being practiced (so we don't pick the same one twice in a row). */
+  currentPairId?: string;
+  /** Comprehensible-input state: which pairs the learner has been introduced to + their mastery records. */
+  introducedIds?: string[];
+  mastery?: Record<string, Mastery>;
   mock?: boolean;
 };
 
 export type OrchestratorOutput = {
   speakerNext: "ai" | "user";
   aiUtterance?: Phrase & { audioUrl: string };
-  routeTo: "conversation" | "tutor";
+  /** What the user should say next. Used as the reference text for Azure pronunciation scoring. */
+  expectedUserResponse?: Phrase;
+  /** Which deck pair this turn is about — needed for client-side mastery tracking. */
+  pairId?: string;
+  /** True when this pair is being introduced for the first time. */
+  isNewPhrase?: boolean;
+  /**
+   * - "conversation": pass; advance to next phrase (aiUtterance set if AI speaks next).
+   * - "tutor": user mostly said the phrase but a specific word was off → drill that word.
+   * - "retry-full": user's audio was largely incomplete (didn't catch most of it) →
+   *   stay on the same phrase, prompt them to try again.
+   */
+  routeTo: "conversation" | "tutor" | "retry-full";
   tutorPayload?: {
     targetWord: string;
     diagnosis: string;
     referenceAudioUrl: string;
     retryPrompt: string;
   };
+  /** Friendly nudge to display when routeTo is "retry-full". */
+  retryHint?: string;
 };
 
-const PASS_THRESHOLD = 80;
+const PASS_THRESHOLD = 80;        // full-sentence attempts
+const RETRY_PASS_THRESHOLD = 65;  // single-character drills in tutor mode
+const COMPLETENESS_FLOOR = 50;    // below this, treat as "didn't catch most of it"
 
 async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorOutput> {
-  if (input.lastUserScore && (input.lastUserScore.accuracy < PASS_THRESHOLD || !input.lastUserScore.tonesOk)) {
+  const threshold = input.isRetry ? RETRY_PASS_THRESHOLD : PASS_THRESHOLD;
+
+  // Distinguish "didn't catch most of the phrase" from "right phrase, tones off".
+  // Skip this branch for tutor retries — single-character drills naturally have
+  // wildly variable completeness against a single-char reference.
+  if (
+    input.lastUserScore &&
+    !input.isRetry &&
+    input.lastUserScore.completeness < COMPLETENESS_FLOOR
+  ) {
+    return {
+      speakerNext: "user",
+      routeTo: "retry-full",
+      retryHint:
+        "I didn't catch most of that — try the whole phrase again, a bit slower.",
+    };
+  }
+
+  if (input.lastUserScore && (input.lastUserScore.accuracy < threshold || !input.lastUserScore.tonesOk)) {
     const worst = [...input.lastUserScore.words].sort((a, b) => a.accuracy - b.accuracy)[0];
     return {
       speakerNext: "user",
       routeTo: "tutor",
       tutorPayload: {
         targetWord: worst?.word ?? "?",
-        diagnosis: `Your "${worst?.word ?? "?"}" came in low (accuracy ${worst?.accuracy ?? 0}). Try again with a clearer tone.`,
+        diagnosis: `That's close — your "${worst?.word ?? "?"}" came in a bit off. Listen to the reference, then give it another shot.`,
         referenceAudioUrl: "/mocks/silence.mp3",
         retryPrompt: worst?.word ?? "?",
       },
@@ -47,19 +88,36 @@ async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorO
   const filtered = input.activeDeckIds.length > 0
     ? decks.filter((d) => input.activeDeckIds.includes(d.deck.id))
     : decks;
-  const pair = pickNextPair(filtered.length > 0 ? filtered : decks, {
-    seenIds: input.history.filter((t) => t.speaker === "ai").map((t) => t.text),
+  const { pair, isNew } = pickPhraseProgressive(filtered.length > 0 ? filtered : decks, {
+    introducedIds: input.introducedIds ?? [],
+    mastery: input.mastery ?? {},
+    avoidId: input.currentPairId,
   });
-  const phrase = pair.q ?? pair.statement!;
+
+  // For Q/A pairs, flip the role half the time so the user practices both
+  // answering (AI asks q → user says a) and asking (AI says a → user says q).
+  // Statement-only pairs (e.g. "thank you") always have user repeat the statement.
+  // Newly-introduced pairs are NOT flipped — easier for the learner to encounter
+  // a new phrase in its natural q→a direction first.
+  const flipRole = !isNew && pair.q && pair.a && Math.random() < 0.5;
+  const aiSays = flipRole ? pair.a! : (pair.q ?? pair.statement!);
+  const userSays = flipRole ? pair.q! : (pair.a ?? pair.statement ?? aiSays);
 
   return {
     speakerNext: "ai",
     routeTo: "conversation",
+    pairId: pair.id,
+    isNewPhrase: isNew,
     aiUtterance: {
-      hanzi: phrase.hanzi,
-      pinyin: phrase.pinyin,
-      english: phrase.english,
+      hanzi: aiSays.hanzi,
+      pinyin: aiSays.pinyin,
+      english: aiSays.english,
       audioUrl: "/mocks/ai-utterance.mp3",
+    },
+    expectedUserResponse: {
+      hanzi: userSays.hanzi,
+      pinyin: userSays.pinyin,
+      english: userSays.english,
     },
   };
 }
@@ -108,13 +166,26 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
     };
   }
 
+  if (decision.decision === "retry_full") {
+    return {
+      speakerNext: "user",
+      routeTo: "retry-full",
+      retryHint: decision.retryHint ?? "Try the whole phrase again.",
+    };
+  }
+
   if (decision.decision === "ai_speak" && decision.aiUtterance) {
     return {
       speakerNext: "ai",
       routeTo: "conversation",
       aiUtterance: { ...decision.aiUtterance, audioUrl: "/mocks/silence.mp3" },
+      expectedUserResponse: decision.expectedUserResponse,
     };
   }
 
-  return { speakerNext: "user", routeTo: "conversation" };
+  return {
+    speakerNext: "user",
+    routeTo: "conversation",
+    expectedUserResponse: decision.expectedUserResponse,
+  };
 }

@@ -1,0 +1,93 @@
+deck:
+  id: pimsleur-l3
+  title: Pimsleur Mandarin III — starter
+  source: starter coverage of Pimsleur Mandarin Level 3 topics; expand as needed
+
+pairs:
+  - id: pim-l3-001
+    q:
+      hanzi: 你觉得怎么样？
+      pinyin: nǐ juéde zěnmeyàng?
+      english: What do you think?
+    a:
+      hanzi: 我觉得很好。
+      pinyin: wǒ juéde hěn hǎo.
+      english: I think it's very good.
+    tags: [lesson-1, opinion]
+
+  - id: pim-l3-002
+    q:
+      hanzi: 你去过中国吗？
+      pinyin: nǐ qù guo zhōngguó ma?
+      english: Have you been to China?
+    a:
+      hanzi: 去过两次。
+      pinyin: qù guo liǎng cì.
+      english: I've been twice.
+    tags: [lesson-2, past, travel]
+
+  - id: pim-l3-003
+    q:
+      hanzi: 这个菜辣不辣？
+      pinyin: zhège cài là bu là?
+      english: Is this dish spicy?
+    a:
+      hanzi: 有一点辣。
+      pinyin: yǒu yìdiǎn là.
+      english: It's a little spicy.
+    tags: [lesson-3, food]
+
+  - id: pim-l3-004
+    q:
+      hanzi: 我应该怎么说？
+      pinyin: wǒ yīnggāi zěnme shuō?
+      english: How should I say it?
+    a:
+      hanzi: 你说得很好。
+      pinyin: nǐ shuō de hěn hǎo.
+      english: You say it very well.
+    tags: [lesson-4, language]
+
+  - id: pim-l3-005
+    q:
+      hanzi: 我们可以一起去吗？
+      pinyin: wǒmen kěyǐ yìqǐ qù ma?
+      english: Can we go together?
+    a:
+      hanzi: 好啊，一起去。
+      pinyin: hǎo a, yìqǐ qù.
+      english: Sure, let's go together.
+    tags: [lesson-5, plans]
+
+  - id: pim-l3-006
+    q:
+      hanzi: 你为什么学中文？
+      pinyin: nǐ wèishénme xué zhōngwén?
+      english: Why are you learning Chinese?
+    a:
+      hanzi: 因为我喜欢中国文化。
+      pinyin: yīnwèi wǒ xǐhuan zhōngguó wénhuà.
+      english: Because I like Chinese culture.
+    tags: [lesson-6, language, culture]
+
+  - id: pim-l3-007
+    q:
+      hanzi: 你听得懂吗？
+      pinyin: nǐ tīng de dǒng ma?
+      english: Can you understand?
+    a:
+      hanzi: 大部分听得懂。
+      pinyin: dàbùfen tīng de dǒng.
+      english: I understand most of it.
+    tags: [lesson-7, language]
+
+  - id: pim-l3-008
+    q:
+      hanzi: 你打算什么时候回美国？
+      pinyin: nǐ dǎsuàn shénme shíhou huí měiguó?
+      english: When are you planning to return to the US?
+    a:
+      hanzi: 下个月回去。
+      pinyin: xià ge yuè huíqu.
+      english: I'll go back next month.
+    tags: [lesson-8, travel, plans]
