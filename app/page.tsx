@@ -22,6 +22,7 @@ export default function Page() {
   const [tutorAttempt, setTutorAttempt] = useState<Score | null>(null);
   const [retryHint, setRetryHint] = useState<string | null>(null);
   const [hideTranslations, setHideTranslations] = useState(false);
+  const [userFreeFormPhrase, setUserFreeFormPhrase] = useState<{ hanzi: string; pinyin: string; english: string } | null>(null);
   const [decks, setDecks] = useState<Array<{ id: string; title: string; pairCount: number }>>([]);
   const [selectedDeckId, setSelectedDeckId] = useState<string>("all");
   const hydratedRef = useRef(false);
@@ -136,6 +137,7 @@ export default function Page() {
           mastery: state.mastery,
           userFreeFormTranscript: transcript,
         });
+        if (out.userAugmented) setUserFreeFormPhrase(out.userAugmented);
         // Single combined utterance: AI's response + follow-up question in one
         // piece. No separate scripted Q to play afterward — pure ping-pong.
         if (out.aiUtterance) {
@@ -339,6 +341,7 @@ export default function Page() {
                 setTutor(null);
                 setTutorAttempt(null);
                 setRetryHint(null);
+                setUserFreeFormPhrase(null);
                 dispatch({ type: "RESET" });
               }
             }}
@@ -363,6 +366,19 @@ export default function Page() {
               onToggleTranslations={() => setHideTranslations((v) => !v)}
               onReplay={() => audioUrl && playAudio(audioUrl)}
             />
+          )}
+
+          {userFreeFormPhrase && (
+            <div className="rounded-md bg-ink-soft/5 px-5 py-3 text-center">
+              <div className="text-[10px] uppercase tracking-widest text-ink-soft mb-1">you said</div>
+              <div className="font-serif text-2xl leading-tight">{userFreeFormPhrase.hanzi}</div>
+              {!hideTranslations && (
+                <>
+                  <div className="mt-1 text-sm text-ink-soft">{userFreeFormPhrase.pinyin}</div>
+                  <div className="text-xs text-ink-soft/80">{userFreeFormPhrase.english}</div>
+                </>
+              )}
+            </div>
           )}
 
           {tutor && (
