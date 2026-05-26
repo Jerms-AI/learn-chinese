@@ -36,6 +36,18 @@ export type ProgressivePick = {
 
 const TIER_VALUE: Record<Tier, number> = { red: 0, orange: 1, yellow: 2, green: 3 };
 
+/** Tags like "lesson-1" are organizational, not semantic. Only the semantic tags
+ * (english, greetings, identity, food, etc.) signal that two phrases cover the
+ * same conversational topic — used to skip near-duplicate next-pair candidates. */
+function semanticTags(p: Pair): string[] {
+  return (p.tags ?? []).filter((t) => !t.startsWith("lesson-"));
+}
+
+function sharesSemanticTag(a: Pair, b: Pair): boolean {
+  const aTags = new Set(semanticTags(a));
+  return semanticTags(b).some((t) => aTags.has(t));
+}
+
 function masteryQuality(m: Mastery | undefined): number {
   if (!m || (m.lastTiers ?? []).length === 0) return 0;
   const avg = m.lastTiers.reduce((s, t) => s + TIER_VALUE[t], 0) / m.lastTiers.length;
@@ -78,6 +90,15 @@ export function pickPhraseProgressive(
   const newestMastery = opts.mastery[newestId];
   const newestPair = introduced.find((p) => p.id === newestId);
   if (isMastered(newestMastery)) {
+    // Prefer un-introduced pairs that DON'T share a semantic tag with the just-
+    // mastered pair — keeps the dialogue moving forward instead of re-asking the
+    // same conversational topic with a different expected answer.
+    const dissimilar = newestPair
+      ? allPairs.find((p) => !introducedSet.has(p.id) && !sharesSemanticTag(p, newestPair))
+      : null;
+    if (dissimilar) return { pair: dissimilar, isNew: true };
+    // Fallback: any un-introduced pair (e.g. if every remaining candidate shares
+    // a tag, we still need to progress).
     const next = allPairs.find((p) => !introducedSet.has(p.id));
     if (next) return { pair: next, isNew: true };
     // Nothing new to introduce; fall through to weighted pick over introduced.

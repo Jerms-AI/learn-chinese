@@ -39,10 +39,12 @@ export function tierFromAvgAccuracy(avg: number): Tier {
   return "red";
 }
 
-/** A phrase is mastered when its 3 most recent attempts are all non-red. */
+/** A phrase is mastered as soon as the most recent attempt is non-red.
+ * (User-tuned: one good attempt advances. Rolling window of 3 still persists in
+ * the library display so the user can see recent history.) */
 export function isMastered(m: Mastery | undefined): boolean {
-  if (!m || (m.lastTiers ?? []).length < 3) return false;
-  return m.lastTiers.every((t) => t !== "red");
+  const last = m?.lastTiers?.[m.lastTiers.length - 1];
+  return !!last && last !== "red";
 }
 
 /** Per-character average accuracy from a score — what tiers are computed against. */
