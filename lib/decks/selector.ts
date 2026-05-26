@@ -23,10 +23,8 @@ export type ProgressiveOptions = {
   mastery: Record<string, Mastery>;
   /** Avoid picking this id (e.g. the one just shown). */
   avoidId?: string;
-  /** Probability of biasing toward the newest-introduced pair during its first few attempts. */
+  /** Probability of biasing toward the newest-unmastered pair on each turn. */
   newPhraseFocusProbability?: number;
-  /** How many attempts the "focus on new" bias persists for. */
-  newPhraseFocusAttempts?: number;
   now?: number;
   rng?: () => number;
 };
@@ -64,8 +62,7 @@ export function pickPhraseProgressive(
 
   const now = opts.now ?? Date.now();
   const rng = opts.rng ?? Math.random;
-  const focusProb = opts.newPhraseFocusProbability ?? 0.7;
-  const focusAttempts = opts.newPhraseFocusAttempts ?? 3;
+  const focusProb = opts.newPhraseFocusProbability ?? 0.9;
   const introducedSet = new Set(opts.introducedIds);
   const introduced = allPairs.filter((p) => introducedSet.has(p.id));
 
@@ -86,21 +83,17 @@ export function pickPhraseProgressive(
     // Nothing new to introduce; fall through to weighted pick over introduced.
   }
 
-  // Focus-on-new bias: the most-recently-introduced pair gets a heavy preference
-  // during its first few attempts (or until mastered).
-  const newestAttempts = newestMastery?.attempts ?? 0;
-  if (
-    newestPair &&
-    newestId !== opts.avoidId &&
-    newestAttempts < focusAttempts &&
-    !isMastered(newestMastery) &&
-    rng() < focusProb
-  ) {
+  // Focus-on-new bias: the most-recently-introduced pair is the user's active
+  // study target. Keep it dominant until it's mastered, regardless of attempt
+  // count — and don't suppress it via avoidId. The user explicitly wants old
+  // phrases to come back less often.
+  if (newestPair && !isMastered(newestMastery) && rng() < focusProb) {
     return { pair: newestPair, isNew: false };
   }
 
-  // Weighted pick from the introduced pool. Avoid picking the same pair twice
-  // in a row when there are other options.
+  // Weighted pick from the introduced pool — used either for review cycles
+  // (when the focus bias didn't fire) or after the newest pair is mastered
+  // and there's nothing new left to introduce.
   const candidates = introduced.length > 1 && opts.avoidId
     ? introduced.filter((p) => p.id !== opts.avoidId)
     : introduced;
@@ -111,10 +104,9 @@ export function pickPhraseProgressive(
     const sinceLastSeenMs = m?.lastSeenAt ? now - m.lastSeenAt : 60_000;
     const weaknessWeight = 1 - quality + 0.15;                           // weak phrases come back more
     const recencyWeight = 1 + Math.log(1 + sinceLastSeenMs / 60_000);
-    // Mastered phrases come back much less often — they're not pushed out of
-    // rotation entirely (long-stale ones do eventually resurface via recency),
-    // but they shouldn't dominate the pool the way newer/weaker phrases should.
-    const masteryDamper = isMastered(m) ? 0.25 : 1.0;
+    // Mastered phrases come back rarely — only enough to refresh long-stale
+    // memory. Tuned aggressively low per user feedback.
+    const masteryDamper = isMastered(m) ? 0.1 : 1.0;
     return { pair: p, weight: weaknessWeight * recencyWeight * masteryDamper };
   });
 
