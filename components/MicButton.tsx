@@ -2,8 +2,16 @@
 import { useEffect } from "react";
 import { useMicRecorder } from "@/lib/audio/use-mic-recorder";
 
-export function MicButton({ onAudio }: { onAudio: (blob: Blob) => void }) {
-  const { isRecording, start, stop } = useMicRecorder();
+export function MicButton({
+  onAudio,
+  onLiveTranscript,
+}: {
+  onAudio: (blob: Blob) => void;
+  /** Called with interim transcripts from the browser's Web Speech API while the
+   * user is still holding the mic. Best-effort; not available in every browser. */
+  onLiveTranscript?: (text: string) => void;
+}) {
+  const { isRecording, liveTranscript, start, stop } = useMicRecorder();
 
   const beginRecord = async () => { if (!isRecording) await start(); };
   const endRecord = async () => {
@@ -12,6 +20,11 @@ export function MicButton({ onAudio }: { onAudio: (blob: Blob) => void }) {
       onAudio(blob);
     }
   };
+
+  // Pipe live transcript out to the parent as it streams in.
+  useEffect(() => {
+    onLiveTranscript?.(liveTranscript);
+  }, [liveTranscript, onLiveTranscript]);
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {

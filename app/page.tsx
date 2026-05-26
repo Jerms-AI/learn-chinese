@@ -37,6 +37,7 @@ export default function Page() {
   const [retryHint, setRetryHint] = useState<string | null>(null);
   const [hideTranslations, setHideTranslations] = useState(false);
   const [userFreeFormPhrase, setUserFreeFormPhrase] = useState<{ hanzi: string; pinyin: string; english: string } | null>(null);
+  const [liveTranscript, setLiveTranscript] = useState("");
   const [decks, setDecks] = useState<Array<{ id: string; title: string; pairCount: number }>>([]);
   const [selectedDeckId, setSelectedDeckId] = useState<string>("all");
   const hydratedRef = useRef(false);
@@ -126,6 +127,7 @@ export default function Page() {
   }
 
   async function userSpoke(blob: Blob) {
+    setLiveTranscript(""); // hide the "you're saying" interim box once mic releases
     const inTutor = !!tutor;
     const inFreeForm = !inTutor && state.mode === "awaiting-user-question";
 
@@ -434,7 +436,14 @@ export default function Page() {
             </div>
           )}
 
-          <MicButton onAudio={userSpoke} />
+          {liveTranscript && (
+            <div className="rounded-2xl bg-terracotta/5 ring-1 ring-terracotta/20 p-6 text-center">
+              <div className="text-[10px] uppercase tracking-widest text-terracotta mb-1">you&apos;re saying</div>
+              <div className="font-serif text-3xl leading-tight">{liveTranscript}</div>
+            </div>
+          )}
+
+          <MicButton onAudio={userSpoke} onLiveTranscript={setLiveTranscript} />
         </div>
 
         <IntroducedList
