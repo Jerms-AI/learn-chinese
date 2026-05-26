@@ -322,6 +322,7 @@ export default function Page() {
                 latestTier={latest}
                 hideTranslations={hideTranslations}
                 isFreeForm={isFreeForm}
+                userJustAsked={state.lastUserFreeForm}
                 onToggleTranslations={() => setHideTranslations((v) => !v)}
                 onReplay={() => audioUrl && playAudio(audioUrl)}
               />

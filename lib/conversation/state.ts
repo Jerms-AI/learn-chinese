@@ -69,6 +69,10 @@ export type State = {
   introducedIds: string[];         // pair IDs the learner has been exposed to (in order)
   mastery: Record<string, Mastery>;
   phraseLibrary: Record<string, LibraryEntry>;
+  /** Transcript of the user's most recent free-form question — shown on the
+   * card alongside Claude's reply so the user can see what was heard. Cleared
+   * when the next scripted Q lands. */
+  lastUserFreeForm?: string;
 };
 
 export type Event =
@@ -125,6 +129,7 @@ export function applyEvent(s: State, e: Event): State {
         currentPairId: e.pairId,
         introducedIds: newlyIntroduced ? [...s.introducedIds, e.pairId!] : s.introducedIds,
         phraseLibrary,
+        lastUserFreeForm: undefined, // clear once we've moved on to the next scripted Q
       };
     }
 
@@ -168,7 +173,7 @@ export function applyEvent(s: State, e: Event): State {
 
     case "USER_FREEFORM": {
       const turn: Turn = { speaker: "user-freeform", text: e.transcript, at: Date.now() };
-      return { ...s, history: [...s.history, turn] };
+      return { ...s, history: [...s.history, turn], lastUserFreeForm: e.transcript };
     }
 
     case "AI_RESPONDED_FREEFORM": {

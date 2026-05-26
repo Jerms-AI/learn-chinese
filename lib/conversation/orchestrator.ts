@@ -67,9 +67,10 @@ async function pickNextScripted(input: OrchestratorInput) {
     avoidId: input.currentPairId,
   });
 
-  const flipRole = !isNew && pair.q && pair.a && Math.random() < 0.5;
-  const aiSays = flipRole ? pair.a! : (pair.q ?? pair.statement!);
-  const userSays = flipRole ? pair.q! : (pair.a ?? pair.statement ?? aiSays);
+  // User only speaks scripted ANSWERS (pair.a). AI always poses pair.q.
+  // Statement-only pairs (e.g. "thank you") still have user repeat the statement.
+  const aiSays = pair.q ?? pair.statement!;
+  const userSays = pair.a ?? pair.statement ?? aiSays;
   return { pair, isNew, aiSays, userSays };
 }
 

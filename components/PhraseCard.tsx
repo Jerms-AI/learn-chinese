@@ -51,6 +51,7 @@ export function PhraseCard({
   latestTier = null,
   hideTranslations = false,
   isFreeForm = false,
+  userJustAsked,
   onToggleTranslations,
   onReplay,
 }: {
@@ -68,6 +69,9 @@ export function PhraseCard({
   /** When true, the "your line" section shows an "ask a question" prompt instead
    * of the scripted response — the loop is waiting for free-form input. */
   isFreeForm?: boolean;
+  /** The user's most recent free-form question (transcribed). When set, shown
+   * above "they said" so the user can see what Azure heard. */
+  userJustAsked?: string;
   onReplay?: () => void;
 }) {
   const showsAnswer = expectedResponse && expectedResponse.hanzi !== phrase.hanzi;
@@ -91,6 +95,13 @@ export function PhraseCard({
           </button>
         )}
       </div>
+
+      {userJustAsked && (
+        <div className="mb-6 pb-4 border-b border-dashed text-center">
+          <div className="text-xs uppercase tracking-widest text-ink-soft mb-1">you asked</div>
+          <div className="font-serif text-xl">{userJustAsked}</div>
+        </div>
+      )}
 
       <div className="text-center">
         <div className="text-xs uppercase tracking-widest text-ink-soft mb-3">they said</div>
