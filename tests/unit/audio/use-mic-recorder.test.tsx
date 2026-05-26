@@ -25,13 +25,14 @@ describe("useMicRecorder", () => {
     });
   });
 
-  it("starts and stops, yielding a Blob", async () => {
+  it("starts and stops, yielding a { blob, transcript } capture", async () => {
     const { result } = renderHook(() => useMicRecorder());
     await act(async () => { await result.current.start(); });
     expect(result.current.isRecording).toBe(true);
-    let blob: Blob | null = null;
-    await act(async () => { blob = await result.current.stop(); });
-    expect(blob).toBeInstanceOf(Blob);
+    let capture: { blob: Blob; transcript: string } | null = null;
+    await act(async () => { capture = await result.current.stop(); });
+    expect(capture!.blob).toBeInstanceOf(Blob);
+    expect(typeof capture!.transcript).toBe("string");
     expect(result.current.isRecording).toBe(false);
   });
 });

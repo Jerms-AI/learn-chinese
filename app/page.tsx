@@ -4,11 +4,10 @@ import { pinyin as toPinyin } from "pinyin-pro";
 import { PhraseCard } from "@/components/PhraseCard";
 import { TonedPinyin } from "@/components/TonedPinyin";
 import { MicButton } from "@/components/MicButton";
-import { type TutorPayload } from "@/components/TutorPanel";
 import { IntroducedList } from "@/components/IntroducedList";
-import { applyEvent, initialState, tierFromAvgAccuracy, avgWordAccuracy, type Score } from "@/lib/conversation/state";
+import { applyEvent, initialState } from "@/lib/conversation/state";
 import { saveState, loadState, clearState } from "@/lib/conversation/persistence";
-import { fetchTurn, postScore, postTts, postTranscribe } from "@/lib/api-client";
+import { fetchTurn, postTts } from "@/lib/api-client";
 
 function reducer(s: ReturnType<typeof initialState>, e: Parameters<typeof applyEvent>[1]) {
   return applyEvent(s, e);
@@ -31,10 +30,6 @@ export default function Page() {
   const [state, dispatch] = useReducer(reducer, initialState());
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [tutor, setTutor] = useState<TutorPayload | null>(null);
-  const [tutorRetries, setTutorRetries] = useState(0);
-  const [lastScore, setLastScore] = useState<Score | null>(null);
-  const [tutorAttempt, setTutorAttempt] = useState<Score | null>(null);
   const [retryHint, setRetryHint] = useState<string | null>(null);
   const [hideTranslations, setHideTranslations] = useState(false);
   const [userFreeFormPhrase, setUserFreeFormPhrase] = useState<{ hanzi: string; pinyin: string; english: string } | null>(null);
@@ -127,19 +122,19 @@ export default function Page() {
     return url;
   }
 
-  async function userSpoke(blob: Blob) {
+  async function userSpoke(_blob: Blob, capturedTranscript: string) {
     setLiveTranscript(""); // hide the "you're saying" interim box once mic releases
-    const inTutor = !!tutor;
-    const inFreeForm = !inTutor && state.mode === "awaiting-user-question";
+    const inFreeForm = state.mode === "awaiting-user-question";
 
-    // FREE-FORM PATH: user is asking anything. Transcribe → ask orchestrator
-    // for a natural reply + the next scripted Q.
+    // FREE-FORM PATH: use the Web Speech transcript captured during mic hold —
+    // no Azure round-trip. Azure couldn't reliably hear Mandarin tones anyway
+    // and the network hop added ~1-2s per turn.
     if (inFreeForm) {
       setBusy(true);
       try {
-        const { transcript } = await postTranscribe(blob);
-        if (!transcript || !transcript.trim()) {
-          // Azure heard nothing — keep the user in free-form mode and prompt retry.
+        const transcript = capturedTranscript.trim();
+        if (!transcript) {
+          // Browser heard nothing — keep the user in free-form mode and prompt retry.
           setRetryHint("I didn't catch that. Hold space and try again.");
           return;
         }
@@ -158,7 +153,6 @@ export default function Page() {
         // Single combined utterance: AI's response + follow-up question in one
         // piece. No separate scripted Q to play afterward — pure ping-pong.
         if (out.aiUtterance) {
-          setLastScore(null);
           const url = await prefetchTts(out.aiUtterance.hanzi);
           dispatch({
             type: "AI_SPOKE",
@@ -173,147 +167,9 @@ export default function Page() {
       return;
     }
 
-    // In tutor mode, the user is drilling a single character — score against THAT,
-    // not the full sentence (otherwise the missing characters all score 0 and the
-    // loop chases a different "worst word" each retry).
-    const ref = inTutor
-      ? tutor!.retryPrompt
-      : state.expectedResponse?.hanzi ?? state.pendingPhrase?.hanzi ?? "";
-    setRetryHint(null); // clear any prior "didn't catch that" while we score the new attempt
-    setBusy(true);
-    try {
-      const score = await postScore(blob, ref);
-      const scoreShape: Score = {
-        accuracy: score.accuracy,
-        completeness: score.completeness,
-        tonesOk: score.tonesOk,
-        words: score.words,
-      };
-
-      // RECOGNITION OVERRIDE: trust Azure's speech-to-text over its pronunciation
-      // assessment. Per-word accuracy scoring is wildly inconsistent on Mandarin
-      // (same audio can score 25 or 98 across re-runs), but the transcript is
-      // reliable. If Azure heard the expected text, count as a pass — the user
-      // genuinely said the thing. Per-word dots stay raw for honest feedback.
-      const norm = (s: string) => s.replace(/[\s。，！？.,!?]/g, "");
-      const recognizedTarget = inTutor
-        ? (tutor ? norm(tutor.retryPrompt) : "")
-        : norm(state.expectedResponse?.hanzi ?? "");
-      const heard = norm(score.transcript);
-      const recognized = !!recognizedTarget && heard.includes(recognizedTarget);
-      if (recognized) {
-        if (inTutor) {
-          // Tutor retries also bump per-word so the small dot turns green-ish.
-          scoreShape.accuracy = Math.max(scoreShape.accuracy, 70);
-          scoreShape.tonesOk = true;
-          if (scoreShape.words.length > 0) {
-            scoreShape.words = scoreShape.words.map((w) => ({
-              ...w,
-              accuracy: Math.max(w.accuracy, 70),
-            }));
-          }
-        } else {
-          // Full-sentence: bump overall + tonesOk so the orchestrator advances,
-          // but leave per-word accuracies untouched. The dots show real numbers
-          // (so you see WHICH chars Azure had trouble with) but you still pass.
-          scoreShape.accuracy = Math.max(scoreShape.accuracy, 80);
-          scoreShape.tonesOk = true;
-        }
-      }
-
-      // Only overwrite the full-sentence score chips on the PhraseCard when this
-      // is a full-sentence attempt. Tutor retries shouldn't clobber that view.
-      if (inTutor) setTutorAttempt(scoreShape);
-      else setLastScore(scoreShape);
-
-      // For full-sentence attempts, compute tier from per-character average accuracy.
-      // Tutor retries don't push into the rolling-tier window (tier = null).
-      // When recognized but raw accuracy would tier red, bump to orange so the
-      // user's mastery streak can still advance (the dot honestly logs that it
-      // was a marginal attempt, but progression isn't blocked).
-      const avgChar = avgWordAccuracy(scoreShape);
-      const rawTier = tierFromAvgAccuracy(avgChar);
-      const tier = inTutor ? null : (recognized && rawTier === "red" ? "orange" : rawTier);
-      const passed = !inTutor && tier !== "red" && scoreShape.completeness >= 50;
-      dispatch({
-        type: "USER_UTTERANCE",
-        transcript: score.transcript,
-        score: scoreShape,
-        passed,
-        tier,
-      });
-
-      // Compute what the mastery WILL be after the reducer applies this attempt,
-      // and send THAT to the orchestrator. The state closure here is pre-dispatch,
-      // so without this the orchestrator can't see the attempt that just landed
-      // (e.g. won't recognize that the third green just made this pair mastered).
-      const nextMastery = state.currentPairId && tier
-        ? {
-            ...state.mastery,
-            [state.currentPairId]: {
-              lastTiers: [...(state.mastery[state.currentPairId]?.lastTiers ?? []), tier].slice(-3),
-              attempts: (state.mastery[state.currentPairId]?.attempts ?? 0) + 1,
-              correct: (state.mastery[state.currentPairId]?.correct ?? 0) + (tier !== "red" ? 1 : 0),
-              lastSeenAt: Date.now(),
-            },
-          }
-        : state.mastery;
-
-      const out = await fetchTurn({
-        history: state.history,
-        lastUserScore: scoreShape,
-        activeDeckIds: expandSelectedDeck(selectedDeckId),
-        metaIntent: null,
-        isRetry: inTutor,
-        currentPairId: state.currentPairId,
-        introducedIds: state.introducedIds,
-        mastery: nextMastery,
-      });
-
-      if (out.routeTo === "tutor" && out.tutorPayload) {
-        setRetryHint(null);
-        const isSameTarget = tutor?.targetWord === out.tutorPayload.targetWord;
-        const nextRetries = isSameTarget ? tutorRetries + 1 : 0;
-        setTutorRetries(nextRetries);
-        setTutor(out.tutorPayload);
-        // Auto-play the target character so the user hears what to repeat.
-        // Each consecutive retry on the same char slows down further (0.85, 0.7, 0.6 ...).
-        const rate = Math.max(0.55, 1.0 - nextRetries * 0.15);
-        try {
-          const url = await postTts(out.tutorPayload.targetWord, nextRetries === 0 ? undefined : rate);
-          await playAudio(url);
-        } catch { /* swallow; user can still try */ }
-        return;
-      }
-
-      if (out.routeTo === "retry-full") {
-        setTutor(null);
-        setTutorAttempt(null);
-        setRetryHint(out.retryHint ?? "Try that again.");
-        return;
-      }
-
-      // Pass branch. Pause briefly so the user can read their per-char accuracy.
-      await new Promise((r) => setTimeout(r, 1500));
-
-      setTutorAttempt(null);
-      setTutor(null);
-      setTutorRetries(0);
-      setRetryHint(null);
-      dispatch({ type: "AI_CONFIRMED" });
-      if (out.aiUtterance) {
-        setLastScore(null); // clear old score before next prompt
-        const url = await prefetchTts(out.aiUtterance.hanzi);
-        dispatch({
-          type: "AI_SPOKE",
-          utterance: out.aiUtterance,
-          expectedResponse: out.expectedUserResponse,
-          pairId: out.pairId,
-          isNewPhrase: out.isNewPhrase,
-        });
-        await playAudio(url);
-      }
-    } finally { setBusy(false); }
+    // Pure free-form is the only path now. The scripted-scoring + tutor flow
+    // was removed alongside Azure pronunciation assessment. If we ever didn't
+    // hit the free-form branch above, just return silently.
   }
 
   return (
@@ -354,9 +210,6 @@ export default function Page() {
             onClick={() => {
               if (confirm("Reset all progress (mastery, history, introduced phrases)?")) {
                 clearState();
-                setLastScore(null);
-                setTutor(null);
-                setTutorAttempt(null);
                 setRetryHint(null);
                 setUserFreeFormPhrase(null);
                 dispatch({ type: "RESET" });
@@ -397,41 +250,7 @@ export default function Page() {
             </div>
           )}
 
-          {tutor && (
-            <div className="rounded-md border-l-4 border-terracotta bg-terracotta/5 px-4 py-3 flex items-center justify-between gap-3">
-              <div className="text-sm text-ink-soft">
-                <span className="text-xs uppercase tracking-widest text-terracotta font-medium mr-2">Drill</span>
-                Repeat after me: <span className="font-serif text-2xl text-ink ml-1">{tutor.targetWord}</span>
-                {tutorAttempt && (
-                  <span className="ml-3 text-xs text-ink-soft">last: {tutorAttempt.accuracy}</span>
-                )}
-              </div>
-              <div className="flex items-center gap-3 text-xs text-ink-soft">
-                <button
-                  onClick={async () => {
-                    try {
-                      const rate = Math.max(0.55, 1.0 - tutorRetries * 0.15);
-                      const url = await postTts(tutor.targetWord, tutorRetries === 0 ? undefined : rate);
-                      await playAudio(url);
-                    } catch {}
-                  }}
-                  className="underline hover:text-ink"
-                  disabled={busy}
-                >
-                  hear again
-                </button>
-                <button
-                  onClick={() => { setTutor(null); setTutorAttempt(null); setTutorRetries(0); dispatch({ type: "TUTOR_RESOLVED" }); }}
-                  className="underline hover:text-ink"
-                  disabled={busy}
-                >
-                  skip
-                </button>
-              </div>
-            </div>
-          )}
-
-          {!tutor && retryHint && (
+          {retryHint && (
             <div className="rounded-md border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-ink-soft">
               {retryHint}
             </div>

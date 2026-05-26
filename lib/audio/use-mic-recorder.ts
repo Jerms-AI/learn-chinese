@@ -2,7 +2,8 @@
 import { useCallback, useRef, useState } from "react";
 
 // Minimal Web Speech API typing — TS lib.dom doesn't always ship it cleanly.
-type LiveSpeechEvent = { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }>> };
+type LiveSpeechResult = { isFinal: boolean; 0: { transcript: string } };
+type LiveSpeechEvent = { resultIndex: number; results: ArrayLike<LiveSpeechResult> };
 type LiveSpeechRecognition = {
   lang: string;
   interimResults: boolean;
@@ -14,6 +15,8 @@ type LiveSpeechRecognition = {
 };
 type LiveSpeechCtor = new () => LiveSpeechRecognition;
 
+export type MicCapture = { blob: Blob; transcript: string };
+
 export function useMicRecorder() {
   const [isRecording, setIsRecording] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
@@ -21,6 +24,9 @@ export function useMicRecorder() {
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const recognitionRef = useRef<LiveSpeechRecognition | null>(null);
+  // Mirror of the latest live transcript in a ref so stop() can read it without
+  // depending on React state being flushed by the time the promise resolves.
+  const transcriptRef = useRef("");
 
   const start = useCallback(async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -32,12 +38,10 @@ export function useMicRecorder() {
     rec.start();
     setIsRecording(true);
 
-    // Run the browser's Web Speech API in parallel for live interim transcription.
-    // This is separate from Azure (which scores the final blob); Web Speech gives
-    // us free real-time partial transcripts as the user is still speaking. Works
-    // in Chromium-based browsers; Safari/Firefox support is patchy — we degrade
-    // silently when unavailable.
+    // Web Speech API for real-time + final transcription. Mandarin via lang=zh-CN.
+    // Chrome/Edge work well; Safari/Firefox degrade silently (no transcript).
     setLiveTranscript("");
+    transcriptRef.current = "";
     const Ctor: LiveSpeechCtor | undefined =
       (window as unknown as { SpeechRecognition?: LiveSpeechCtor }).SpeechRecognition ??
       (window as unknown as { webkitSpeechRecognition?: LiveSpeechCtor }).webkitSpeechRecognition;
@@ -50,34 +54,35 @@ export function useMicRecorder() {
         sr.onresult = (e: LiveSpeechEvent) => {
           let text = "";
           for (let i = 0; i < e.results.length; i++) {
-            const result = e.results[i];
-            if (result && result[0]) text += result[0].transcript;
+            const r = e.results[i];
+            if (r && r[0]) text += r[0].transcript;
           }
+          transcriptRef.current = text;
           setLiveTranscript(text);
         };
-        sr.onerror = () => {}; // ignore — Azure final result is the source of truth
+        sr.onerror = () => {};
         sr.start();
         recognitionRef.current = sr;
       } catch {
-        // No live transcription — that's fine, we still have Azure on release.
+        // ignored — no live transcript available
       }
     }
   }, []);
 
-  const stop = useCallback((): Promise<Blob> => {
+  const stop = useCallback((): Promise<MicCapture> => {
     return new Promise((resolve) => {
       try { recognitionRef.current?.stop(); } catch {}
       recognitionRef.current = null;
 
       const rec = recorderRef.current;
-      if (!rec) { resolve(new Blob([])); return; }
+      if (!rec) { resolve({ blob: new Blob([]), transcript: transcriptRef.current }); return; }
       rec.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
         streamRef.current?.getTracks().forEach((t) => t.stop());
         recorderRef.current = null;
         streamRef.current = null;
         setIsRecording(false);
-        resolve(blob);
+        resolve({ blob, transcript: transcriptRef.current });
       };
       rec.stop();
     });

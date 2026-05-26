@@ -6,7 +6,9 @@ export function MicButton({
   onAudio,
   onLiveTranscript,
 }: {
-  onAudio: (blob: Blob) => void;
+  /** Fires when the user releases the mic. Receives the captured audio blob
+   * AND the Web Speech API's final transcript (browser-side, no API call). */
+  onAudio: (blob: Blob, transcript: string) => void;
   /** Called with interim transcripts from the browser's Web Speech API while the
    * user is still holding the mic. Best-effort; not available in every browser. */
   onLiveTranscript?: (text: string) => void;
@@ -16,8 +18,8 @@ export function MicButton({
   const beginRecord = async () => { if (!isRecording) await start(); };
   const endRecord = async () => {
     if (isRecording) {
-      const blob = await stop();
-      onAudio(blob);
+      const { blob, transcript } = await stop();
+      onAudio(blob, transcript);
     }
   };
 

@@ -1,9 +1,0 @@
-{
-  "AccuracyScore": 87,
-  "FluencyScore": 90,
-  "CompletenessScore": 100,
-  "Words": [
-    { "Word": "你", "AccuracyScore": 82, "PronunciationAssessment": { "ErrorType": "None", "AccuracyScore": 82 } },
-    { "Word": "好", "AccuracyScore": 91, "PronunciationAssessment": { "ErrorType": "None", "AccuracyScore": 91 } }
-  ]
-}
