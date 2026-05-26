@@ -122,16 +122,20 @@ export function applyEvent(s: State, e: Event): State {
               [e.pairId]: { prompt: e.utterance, response: e.expectedResponse },
             }
           : s.phraseLibrary;
+      // No expectedResponse = free-form mode (conversational ping-pong, user just
+      // responds however). Otherwise we're in the older scripted-A flow where the
+      // user must say a specific phrase next.
+      const nextMode = e.expectedResponse ? "awaiting-user-answer" : "awaiting-user-question";
       return {
         ...s,
-        mode: "awaiting-user-answer",
+        mode: nextMode,
         history: [...s.history, turn],
         pendingPhrase: e.utterance,
         expectedResponse: e.expectedResponse,
         currentPairId: e.pairId,
         introducedIds: newlyIntroduced ? [...s.introducedIds, e.pairId!] : s.introducedIds,
         phraseLibrary,
-        lastUserFreeForm: undefined, // clear once we've moved on to the next scripted Q
+        lastUserFreeForm: undefined, // clear once we've moved on to the next AI turn
       };
     }
 

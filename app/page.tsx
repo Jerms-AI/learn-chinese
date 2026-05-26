@@ -141,17 +141,10 @@ export default function Page() {
         if (out.userAugmented) {
           setUserFreeFormPhrase(out.userAugmented);
         }
-        // Pre-fetch each utterance's TTS BEFORE dispatching the UI update, so
-        // text + audio land together (no silent gap while Azure synthesizes).
-        if (out.aiResponse) {
-          const url = await prefetchTts(out.aiResponse.hanzi);
-          dispatch({ type: "AI_RESPONDED_FREEFORM", utterance: out.aiResponse });
-          await playAudio(url);
-          await new Promise((r) => setTimeout(r, 1200));
-        }
+        // Single combined utterance: AI's response + follow-up question in one
+        // piece. No separate scripted Q to play afterward — pure ping-pong.
         if (out.aiUtterance) {
           setLastScore(null);
-          setUserFreeFormPhrase(null); // clear once we transition to next scripted Q
           const url = await prefetchTts(out.aiUtterance.hanzi);
           dispatch({
             type: "AI_SPOKE",
@@ -160,7 +153,7 @@ export default function Page() {
             pairId: out.pairId,
             isNewPhrase: out.isNewPhrase,
           });
-          await playAudio(url);
+          if (url) await playAudio(url);
         }
       } finally { setBusy(false); }
       return;
@@ -183,6 +176,37 @@ export default function Page() {
         words: score.words,
       };
 
+      // RECOGNITION OVERRIDE: trust Azure's speech-to-text over its pronunciation
+      // assessment. Per-word accuracy scoring is wildly inconsistent on Mandarin
+      // (same audio can score 25 or 98 across re-runs), but the transcript is
+      // reliable. If Azure heard the expected text, count as a pass — the user
+      // genuinely said the thing. Per-word dots stay raw for honest feedback.
+      const norm = (s: string) => s.replace(/[\s。，！？.,!?]/g, "");
+      const recognizedTarget = inTutor
+        ? (tutor ? norm(tutor.retryPrompt) : "")
+        : norm(state.expectedResponse?.hanzi ?? "");
+      const heard = norm(score.transcript);
+      const recognized = !!recognizedTarget && heard.includes(recognizedTarget);
+      if (recognized) {
+        if (inTutor) {
+          // Tutor retries also bump per-word so the small dot turns green-ish.
+          scoreShape.accuracy = Math.max(scoreShape.accuracy, 70);
+          scoreShape.tonesOk = true;
+          if (scoreShape.words.length > 0) {
+            scoreShape.words = scoreShape.words.map((w) => ({
+              ...w,
+              accuracy: Math.max(w.accuracy, 70),
+            }));
+          }
+        } else {
+          // Full-sentence: bump overall + tonesOk so the orchestrator advances,
+          // but leave per-word accuracies untouched. The dots show real numbers
+          // (so you see WHICH chars Azure had trouble with) but you still pass.
+          scoreShape.accuracy = Math.max(scoreShape.accuracy, 80);
+          scoreShape.tonesOk = true;
+        }
+      }
+
       // Only overwrite the full-sentence score chips on the PhraseCard when this
       // is a full-sentence attempt. Tutor retries shouldn't clobber that view.
       if (inTutor) setTutorAttempt(scoreShape);
@@ -190,8 +214,12 @@ export default function Page() {
 
       // For full-sentence attempts, compute tier from per-character average accuracy.
       // Tutor retries don't push into the rolling-tier window (tier = null).
+      // When recognized but raw accuracy would tier red, bump to orange so the
+      // user's mastery streak can still advance (the dot honestly logs that it
+      // was a marginal attempt, but progression isn't blocked).
       const avgChar = avgWordAccuracy(scoreShape);
-      const tier = inTutor ? null : tierFromAvgAccuracy(avgChar);
+      const rawTier = tierFromAvgAccuracy(avgChar);
+      const tier = inTutor ? null : (recognized && rawTier === "red" ? "orange" : rawTier);
       const passed = !inTutor && tier !== "red" && scoreShape.completeness >= 50;
       dispatch({
         type: "USER_UTTERANCE",
@@ -332,25 +360,16 @@ export default function Page() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
         <div className="space-y-8">
-          {state.pendingPhrase && (() => {
-            const currentTiers = state.currentPairId ? state.mastery[state.currentPairId]?.lastTiers ?? [] : [];
-            const latest = currentTiers[currentTiers.length - 1] ?? null;
-            const isFreeForm = state.mode === "awaiting-user-question";
-            return (
-              <PhraseCard
-                phrase={state.pendingPhrase}
-                expectedResponse={state.expectedResponse}
-                lastScore={isFreeForm ? null : lastScore}
-                isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
-                latestTier={latest}
-                hideTranslations={hideTranslations}
-                isFreeForm={isFreeForm}
-                userJustAsked={userFreeFormPhrase}
-                onToggleTranslations={() => setHideTranslations((v) => !v)}
-                onReplay={() => audioUrl && playAudio(audioUrl)}
-              />
-            );
-          })()}
+          {state.pendingPhrase && (
+            <PhraseCard
+              phrase={state.pendingPhrase}
+              isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
+              hideTranslations={hideTranslations}
+              userJustAsked={userFreeFormPhrase}
+              onToggleTranslations={() => setHideTranslations((v) => !v)}
+              onReplay={() => audioUrl && playAudio(audioUrl)}
+            />
+          )}
 
           {tutor && (
             <div className="rounded-md border-l-4 border-terracotta bg-terracotta/5 px-4 py-3 flex items-center justify-between gap-3">

@@ -59,11 +59,13 @@ export async function scorePronunciation(
 
   const audioConfig = sdk.AudioConfig.fromStreamInput(pushStream);
   const recognizer = new sdk.SpeechRecognizer(speechConfig, audioConfig);
+  // Phoneme granularity (Word was even worse). Miscue OFF still — it punishes
+  // single-char drills for any added breath as an "inserted word".
   const paConfig = new sdk.PronunciationAssessmentConfig(
     referenceText,
     sdk.PronunciationAssessmentGradingSystem.HundredMark,
     sdk.PronunciationAssessmentGranularity.Phoneme,
-    true
+    false
   );
   paConfig.applyTo(recognizer);
 
