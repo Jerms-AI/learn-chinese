@@ -131,12 +131,15 @@ export default function Page() {
           mastery: state.mastery,
           userFreeFormTranscript: transcript,
         });
+        // Show Claude's response on the card BEFORE speaking it, then play, then
+        // pause briefly so the user can read it before the next scripted Q lands.
         if (out.aiResponse) {
+          dispatch({ type: "AI_RESPONDED_FREEFORM", utterance: out.aiResponse });
           await speakAndDispatch(out.aiResponse);
+          await new Promise((r) => setTimeout(r, 1200));
         }
         if (out.aiUtterance) {
           setLastScore(null);
-          await speakAndDispatch(out.aiUtterance);
           dispatch({
             type: "AI_SPOKE",
             utterance: out.aiUtterance,
@@ -144,6 +147,7 @@ export default function Page() {
             pairId: out.pairId,
             isNewPhrase: out.isNewPhrase,
           });
+          await speakAndDispatch(out.aiUtterance);
         }
       } finally { setBusy(false); }
       return;

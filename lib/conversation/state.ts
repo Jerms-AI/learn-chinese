@@ -76,6 +76,7 @@ export type Event =
   | { type: "AI_SPOKE"; utterance: Phrase; expectedResponse?: Phrase; pairId?: string; isNewPhrase?: boolean }
   | { type: "USER_UTTERANCE"; transcript: string; score: Score; passed: boolean; tier?: Tier | null }
   | { type: "USER_FREEFORM"; transcript: string }
+  | { type: "AI_RESPONDED_FREEFORM"; utterance: Phrase }
   | { type: "AI_CONFIRMED" }
   | { type: "TUTOR_RESOLVED" }
   | { type: "RESET" }
@@ -168,6 +169,21 @@ export function applyEvent(s: State, e: Event): State {
     case "USER_FREEFORM": {
       const turn: Turn = { speaker: "user-freeform", text: e.transcript, at: Date.now() };
       return { ...s, history: [...s.history, turn] };
+    }
+
+    case "AI_RESPONDED_FREEFORM": {
+      // Claude's free-form reply: show in "they said" without an expected response
+      // or scripted-pair context. The next AI_SPOKE will replace this with the
+      // scripted phrase.
+      const turn: Turn = { speaker: "ai", text: e.utterance.hanzi, phrase: e.utterance, at: Date.now() };
+      return {
+        ...s,
+        mode: "ai-speaking",
+        history: [...s.history, turn],
+        pendingPhrase: e.utterance,
+        expectedResponse: undefined,
+        currentPairId: undefined,
+      };
     }
 
     case "TUTOR_RESOLVED":
