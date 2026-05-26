@@ -141,21 +141,11 @@ export default function Page() {
         if (out.userAugmented) {
           setUserFreeFormPhrase(out.userAugmented);
         }
-        // Kick off BOTH TTS fetches in parallel — by the time the response
-        // finishes playing, the next-phrase audio is almost certainly ready.
-        const respPromise = out.aiResponse ? prefetchTts(out.aiResponse.hanzi) : Promise.resolve<string | null>(null);
-        const utterPromise = out.aiUtterance ? prefetchTts(out.aiUtterance.hanzi) : Promise.resolve<string | null>(null);
-
-        if (out.aiResponse) {
-          const url = await respPromise;
-          dispatch({ type: "AI_RESPONDED_FREEFORM", utterance: out.aiResponse });
-          if (url) await playAudio(url);
-          await new Promise((r) => setTimeout(r, 1200));
-        }
+        // Single combined utterance: AI's response + follow-up question in one
+        // piece. No separate scripted Q to play afterward — pure ping-pong.
         if (out.aiUtterance) {
           setLastScore(null);
-          setUserFreeFormPhrase(null); // clear once we transition to next scripted Q
-          const url = await utterPromise; // likely already resolved by now
+          const url = await prefetchTts(out.aiUtterance.hanzi);
           dispatch({
             type: "AI_SPOKE",
             utterance: out.aiUtterance,

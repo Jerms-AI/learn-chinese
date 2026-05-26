@@ -144,14 +144,7 @@ export function PhraseCard({
               <span className="text-xs italic text-ink-soft">(repeat what they said)</span>
             )}
           </div>
-          {isFreeForm ? (
-            <div className="py-2">
-              <div className="font-serif text-3xl text-terracotta">问我一个问题</div>
-              <div className="mt-2 text-sm text-ink-soft">
-                Ask me anything in Mandarin — hold space and speak.
-              </div>
-            </div>
-          ) : userJustAsked ? (
+          {userJustAsked ? (
             <>
               <div className="font-serif text-4xl leading-tight">{userJustAsked.hanzi}</div>
               {!hideTranslations && (
@@ -163,6 +156,10 @@ export function PhraseCard({
                 </>
               )}
             </>
+          ) : isFreeForm ? (
+            <div className="py-2 text-sm text-ink-soft">
+              Your turn — hold space and respond in Mandarin.
+            </div>
           ) : repeatMode && !lastScore ? (
             <div className="py-2 text-sm text-ink-soft">
               Hold space and say the phrase above.

@@ -4,7 +4,6 @@ import type { Phrase } from "@/lib/decks/schema";
 import { loadAllDecks } from "@/lib/decks/loader";
 import { pickPhraseProgressive } from "@/lib/decks/selector";
 import { getAnthropic, CLAUDE_HAIKU_MODEL } from "@/lib/providers/anthropic";
-import { isMastered } from "./state";
 import type { Pair } from "@/lib/decks/schema";
 
 export type OrchestratorInput = {
@@ -39,6 +38,9 @@ export type OrchestratorOutput = {
   pairId?: string;
   /** True when this pair is being introduced for the first time. */
   isNewPhrase?: boolean;
+  /** All chapter pairs Claude drew vocabulary from in this turn — useful for the
+   * library card to mark them as "encountered" without a strict per-pair drill. */
+  usedPairIds?: string[];
   /**
    * - "conversation": pass; advance to next phrase (aiUtterance set if AI speaks next).
    * - "tutor": user mostly said the phrase but a specific word was off → drill that word.
@@ -147,44 +149,36 @@ async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorO
   };
 }
 
-type FreeFormContext = {
-  userTranscript: string;
-  recentHistory: Turn[];
-  /** The next scripted question the tutor will deliver after this reply. */
-  nextScriptedQ: Phrase | null;
-  /** The expected user answer to that scripted Q. Lets Claude tell if the
-   * scenario has changed even when the question looks the same. */
-  nextExpectedResponse: Phrase | null;
-  /** The most recent scripted Q the user already answered (if any). */
-  prevScriptedQ: Phrase | null;
-  /** What the user actually said in their last scripted answer. */
-  prevUserAnswer: string | null;
-};
-
-type FreeFormResult = {
-  /** What the user said, augmented with pinyin + english translation. */
+type ConversationalTurnResult = {
+  /** What the user said, augmented with pinyin + english (only when user just spoke). */
   userAugmented?: Phrase;
-  /** The AI's natural reply (with optional segue to the next scripted Q). */
-  aiReply?: Phrase;
-  /** Pair ID Claude picked from the candidate pool, if any. Validated by caller. */
-  chosenPairId?: string;
+  /** Claude's combined utterance: a brief acknowledgement of what the user said
+   * (when applicable) + a follow-up question that uses chapter vocab. Single
+   * piece of audio, no separate scripted phrase to drill. */
+  utterance: Phrase;
+  /** IDs of chapter pairs Claude actually used in its utterance. Used to mark
+   * them as "introduced" in the library so the user sees their progress. */
+  usedPairIds: string[];
 };
 
-async function generateContextualReply(
-  ctx: FreeFormContext,
-  candidates: Pair[],
-  introducedIds: string[],
-  mastery: Record<string, import("./state").Mastery>
-): Promise<FreeFormResult> {
-  // Annotate candidates with status so Claude knows what to prefer.
+/** Generates one conversational AI turn. Used for both the initial opener
+ * (no user transcript yet) and follow-up replies (user transcript present).
+ * The chapter pool informs Claude's vocab but is not a strict script — Claude
+ * is free to recombine + paraphrase to keep the dialogue flowing naturally. */
+async function generateConversationalTurn(
+  userTranscript: string | null,
+  recentHistory: Turn[],
+  chapterPool: Pair[],
+  introducedIds: string[]
+): Promise<ConversationalTurnResult> {
   const introducedSet = new Set(introducedIds);
-  const annotated = candidates.map((p) => ({
+  const annotated = chapterPool.map((p) => ({
     id: p.id,
     q: p.q,
     a: p.a,
     statement: p.statement,
     tags: p.tags,
-    status: !introducedSet.has(p.id) ? "new" : isMastered(mastery[p.id]) ? "mastered" : "learning",
+    introduced: introducedSet.has(p.id),
   }));
 
   try {
@@ -192,32 +186,31 @@ async function generateContextualReply(
     const resp = await client.messages.create({
       model: CLAUDE_HAIKU_MODEL,
       max_tokens: 400,
-      system: `You are a friendly Mandarin tutor leading a free-flowing conversation that stays within a fixed pool of chapter phrases. The user just said something free-form. You will do THREE things in JSON:
+      system: `You are a friendly Mandarin tutor having a natural back-and-forth conversation with a learner. Your job is to keep a coherent dialogue going while staying within the vocabulary and grammar patterns of the active chapter (chapterPool). Vocabulary outside the chapter is allowed sparingly when it would feel unnatural to avoid, but mostly use the chapter's words and patterns.
 
-1. user: pinyin (with tone marks) + English translation of what the user said.
-2. reply: ONE or TWO short Mandarin statement sentences as a natural conversational reply. Do NOT ask a question — the scripted phrase comes after.
-3. chosenPairId: pick the next scripted phrase to drill from the candidates list.
+Each turn you produce ONE combined Mandarin utterance: a brief, natural response to what the user said + a follow-up question that keeps the dialogue moving. Speak like a friend, not a textbook. Aim for 1-3 short sentences total.
 
-Picking rules:
-- Pick what fits the CONVERSATIONAL CONTEXT — if the user asked about food, choose a food-related candidate; if they asked about your day, a time/feelings one. Build coherent dialogue threads.
-- PREFER candidates with status "new" or "learning" (the learner makes progress). "mastered" candidates are review-only; pick them only if no contextual fit exists in new/learning.
-- DON'T pick a candidate whose q/statement closely resembles the prevScriptedQ — don't immediately re-ask the same kind of question.
-- Your reply's last sentence should gently segue to the topic of the picked phrase so the transition feels natural.
+If userSaid is null (initial turn), greet the learner and ask an opening question grounded in chapter topics.
+
+If userSaid has content, respond to it naturally then segue to your next question. The flow should feel like ping-pong — answer something → ask something → user replies → you answer + ask → etc.
+
+Picking vocabulary:
+- Lean on chapter phrases/words. Mix and recombine; you don't need to use whole pair sentences verbatim.
+- Prefer un-introduced (introduced=false) phrases to expose the learner to new content. Re-use introduced phrases when they fit the conversational thread for review.
+- Track which chapter pairs you actually drew vocabulary from and list their ids in usedPairIds.
 
 Output ONLY this JSON (no markdown):
 {
-  "user": { "pinyin": "...", "english": "..." },
-  "reply": { "hanzi": "...", "pinyin": "...", "english": "..." },
-  "chosenPairId": "<id from candidates>"
+  ${userTranscript ? '"user": { "pinyin": "...", "english": "..." },' : ""}
+  "utterance": { "hanzi": "...", "pinyin": "...", "english": "..." },
+  "usedPairIds": ["...", "..."]
 }`,
       messages: [{
         role: "user",
         content: JSON.stringify({
-          userSaid: ctx.userTranscript,
-          recentHistory: ctx.recentHistory.slice(-6),
-          prevScriptedQ: ctx.prevScriptedQ,
-          prevUserAnswer: ctx.prevUserAnswer,
-          candidates: annotated,
+          userSaid: userTranscript,
+          recentHistory: recentHistory.slice(-8),
+          chapterPool: annotated,
         }),
       }],
     });
@@ -225,131 +218,68 @@ Output ONLY this JSON (no markdown):
     const cleaned = (textBlock?.text ?? "").replace(/```json\s*/g, "").replace(/```\s*$/g, "").trim();
     const parsed = JSON.parse(cleaned) as {
       user?: { pinyin?: string; english?: string };
-      reply?: { hanzi?: string; pinyin?: string; english?: string };
-      chosenPairId?: string;
+      utterance?: { hanzi?: string; pinyin?: string; english?: string };
+      usedPairIds?: string[];
     };
-    const userAugmented = parsed.user?.pinyin && parsed.user?.english
-      ? { hanzi: ctx.userTranscript, pinyin: parsed.user.pinyin, english: parsed.user.english }
+    const userAugmented = userTranscript && parsed.user?.pinyin && parsed.user?.english
+      ? { hanzi: userTranscript, pinyin: parsed.user.pinyin, english: parsed.user.english }
       : undefined;
-    const aiReply = parsed.reply?.hanzi && parsed.reply?.pinyin && parsed.reply?.english
-      ? { hanzi: parsed.reply.hanzi, pinyin: parsed.reply.pinyin, english: parsed.reply.english }
-      : { hanzi: "好。", pinyin: "hǎo.", english: "OK." };
-    return { userAugmented, aiReply, chosenPairId: parsed.chosenPairId };
+    const utterance = parsed.utterance?.hanzi && parsed.utterance?.pinyin && parsed.utterance?.english
+      ? { hanzi: parsed.utterance.hanzi, pinyin: parsed.utterance.pinyin, english: parsed.utterance.english }
+      : { hanzi: "你好！", pinyin: "nǐ hǎo!", english: "Hello!" };
+    const usedPairIds = Array.isArray(parsed.usedPairIds) ? parsed.usedPairIds.filter((id) => typeof id === "string") : [];
+    return { userAugmented, utterance, usedPairIds };
   } catch {
-    return { aiReply: { hanzi: "好。", pinyin: "hǎo.", english: "OK." } };
+    return {
+      utterance: { hanzi: "你好！", pinyin: "nǐ hǎo!", english: "Hello!" },
+      usedPairIds: [],
+    };
   }
 }
-
-const FULL_PASS_THRESHOLD = 80;
-const FULL_PASS_COMPLETENESS = 50;
 
 export async function runOrchestrator(input: OrchestratorInput): Promise<OrchestratorOutput> {
   const useMock = input.mock || !process.env.ANTHROPIC_API_KEY;
   if (useMock) return mockOrchestrator(input);
 
-  // PASS branch — user just answered a scripted phrase correctly and hasn't yet
-  // spoken free-form. Hand the floor to the user. No Claude call needed.
-  if (input.lastUserScore && !input.userFreeFormTranscript && !input.isRetry) {
-    const s = input.lastUserScore;
-    const passed = s.accuracy >= FULL_PASS_THRESHOLD && s.tonesOk && s.completeness >= FULL_PASS_COMPLETENESS;
-    if (passed) {
-      return { speakerNext: "user", routeTo: "conversation" };
-    }
-  }
+  // Build the active-chapter pool (filtered by active deck selection).
+  const decks = await loadAllDecks(path.join(process.cwd(), "decks"));
+  const filtered = input.activeDeckIds.length > 0
+    ? decks.filter((d) => input.activeDeckIds.includes(d.deck.id))
+    : decks;
+  const chapterPool = filtered.flatMap((d) => d.pairs).slice(0, 30);
 
-  // FAIL branch — score below threshold or completeness low. Use the heuristic
-  // routing from the mock orchestrator (worst-word for tutor, retry-full for
-  // low completeness). Claude diagnosis can layer on top later.
-  if (input.lastUserScore) {
-    const fallback = await mockOrchestrator(input);
-    if (fallback.routeTo === "tutor" || fallback.routeTo === "retry-full") {
-      return fallback;
-    }
-  }
+  // Pure ping-pong: one Claude call per turn. Initial turn (no userFreeFormTranscript)
+  // produces an opener; subsequent turns produce a response + follow-up question.
+  // No scripted Q/A drilling — the chapter pool informs vocab but the dialogue
+  // is free-flowing.
+  const result = await generateConversationalTurn(
+    input.userFreeFormTranscript ?? null,
+    input.history,
+    chapterPool,
+    input.introducedIds ?? []
+  );
 
-  // Hunt back through history for the most recent scripted AI Q + user scripted answer.
-  const reversed = [...input.history].reverse();
-  const prevAiTurn = reversed.find((t) => t.speaker === "ai");
-  const prevUserTurn = reversed.find((t) => t.speaker === "user");
-  const prevScriptedQ = prevAiTurn?.speaker === "ai" ? prevAiTurn.phrase : null;
-  const prevUserAnswer = prevUserTurn?.speaker === "user" ? prevUserTurn.text : null;
+  // Mark the first used pair as the "currentPair" for the library highlight.
+  // (We're keeping a single tracked pair for backward compat with the library
+  // card. usedPairIds carries the rest; the page can dispatch them all as
+  // "introduced" so the library shows progress.)
+  const introducedSet = new Set(input.introducedIds ?? []);
+  const newUsed = result.usedPairIds.filter((id) => !introducedSet.has(id) && chapterPool.some((p) => p.id === id));
+  const primaryPairId = result.usedPairIds.find((id) => chapterPool.some((p) => p.id === id));
 
-  // FREE-FORM PATH: Claude picks the next scripted phrase contextually from the
-  // active chapter's pool + composes the conversational reply.
-  if (input.userFreeFormTranscript) {
-    const decks = await loadAllDecks(path.join(process.cwd(), "decks"));
-    const filtered = input.activeDeckIds.length > 0
-      ? decks.filter((d) => input.activeDeckIds.includes(d.deck.id))
-      : decks;
-    const candidatePool = filtered
-      .flatMap((d) => d.pairs)
-      .filter((p) => p.id !== input.currentPairId)
-      .slice(0, 30);
-
-    const result = await generateContextualReply(
-      {
-        userTranscript: input.userFreeFormTranscript,
-        recentHistory: input.history,
-        nextScriptedQ: null,
-        nextExpectedResponse: null,
-        prevScriptedQ,
-        prevUserAnswer,
-      },
-      candidatePool,
-      input.introducedIds ?? [],
-      input.mastery ?? {}
-    );
-
-    // Look up the chosen pair from the candidate pool. Fall back to the
-    // deterministic selector if Claude's id is invalid (hallucinated, missing, etc.).
-    let pickedPair = candidatePool.find((p) => p.id === result.chosenPairId);
-    let pickedIsNew = !!pickedPair && !(input.introducedIds ?? []).includes(pickedPair.id);
-    if (!pickedPair) {
-      const fb = await pickNextScripted(input);
-      pickedPair = fb.pair;
-      pickedIsNew = fb.isNew;
-    }
-    const aiSays = pickedPair.q ?? pickedPair.statement!;
-    const userSays = pickedPair.a ?? pickedPair.statement ?? aiSays;
-
-    return {
-      speakerNext: "ai",
-      routeTo: "conversation",
-      pairId: pickedPair.id,
-      isNewPhrase: pickedIsNew,
-      aiResponse: result.aiReply,
-      userAugmented: result.userAugmented,
-      aiUtterance: {
-        hanzi: aiSays.hanzi,
-        pinyin: aiSays.pinyin,
-        english: aiSays.english,
-        audioUrl: "/mocks/silence.mp3",
-      },
-      expectedUserResponse: {
-        hanzi: userSays.hanzi,
-        pinyin: userSays.pinyin,
-        english: userSays.english,
-      },
-    };
-  }
-
-  // INITIAL AI TURN — no free-form input. Use the deterministic selector.
-  const { pair, isNew, aiSays, userSays } = await pickNextScripted(input);
   return {
-    speakerNext: "ai",
+    speakerNext: "user",
     routeTo: "conversation",
-    pairId: pair.id,
-    isNewPhrase: isNew,
+    pairId: primaryPairId,
+    isNewPhrase: !!primaryPairId && newUsed.includes(primaryPairId),
+    usedPairIds: result.usedPairIds,
     aiUtterance: {
-      hanzi: aiSays.hanzi,
-      pinyin: aiSays.pinyin,
-      english: aiSays.english,
+      hanzi: result.utterance.hanzi,
+      pinyin: result.utterance.pinyin,
+      english: result.utterance.english,
       audioUrl: "/mocks/silence.mp3",
     },
-    expectedUserResponse: {
-      hanzi: userSays.hanzi,
-      pinyin: userSays.pinyin,
-      english: userSays.english,
-    },
+    userAugmented: result.userAugmented,
+    // No expectedUserResponse — the user responds free-form, no scripted scoring.
   };
 }
