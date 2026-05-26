@@ -88,9 +88,7 @@ export default function Page() {
         mastery: state.mastery,
       });
       if (out.aiUtterance) {
-        const url = await postTts(out.aiUtterance.hanzi);
-        setAudioUrl(url);
-        await playAudio(url);
+        const url = await prefetchTts(out.aiUtterance.hanzi);
         dispatch({
           type: "AI_SPOKE",
           utterance: out.aiUtterance,
@@ -98,16 +96,17 @@ export default function Page() {
           pairId: out.pairId,
           isNewPhrase: out.isNewPhrase,
         });
+        await playAudio(url);
       }
     } finally { setBusy(false); }
   }
 
-  // Helper: play an utterance via TTS and wait for it to finish.
-  async function speakAndDispatch(utterance: { hanzi: string; pinyin: string; english: string }, opts: { dispatchAfter?: () => void } = {}) {
-    const url = await postTts(utterance.hanzi);
+  /** Pre-fetch the TTS audio URL so we can dispatch the UI update + start
+   * playback in the same tick (no silent gap while Azure synthesizes). */
+  async function prefetchTts(text: string): Promise<string> {
+    const url = await postTts(text);
     setAudioUrl(url);
-    await playAudio(url);
-    opts.dispatchAfter?.();
+    return url;
   }
 
   async function userSpoke(blob: Blob) {
@@ -131,15 +130,17 @@ export default function Page() {
           mastery: state.mastery,
           userFreeFormTranscript: transcript,
         });
-        // Show Claude's response on the card BEFORE speaking it, then play, then
-        // pause briefly so the user can read it before the next scripted Q lands.
+        // Pre-fetch each utterance's TTS BEFORE dispatching the UI update, so
+        // text + audio land together (no silent gap while Azure synthesizes).
         if (out.aiResponse) {
+          const url = await prefetchTts(out.aiResponse.hanzi);
           dispatch({ type: "AI_RESPONDED_FREEFORM", utterance: out.aiResponse });
-          await speakAndDispatch(out.aiResponse);
+          await playAudio(url);
           await new Promise((r) => setTimeout(r, 1200));
         }
         if (out.aiUtterance) {
           setLastScore(null);
+          const url = await prefetchTts(out.aiUtterance.hanzi);
           dispatch({
             type: "AI_SPOKE",
             utterance: out.aiUtterance,
@@ -147,7 +148,7 @@ export default function Page() {
             pairId: out.pairId,
             isNewPhrase: out.isNewPhrase,
           });
-          await speakAndDispatch(out.aiUtterance);
+          await playAudio(url);
         }
       } finally { setBusy(false); }
       return;
@@ -237,9 +238,7 @@ export default function Page() {
       dispatch({ type: "AI_CONFIRMED" });
       if (out.aiUtterance) {
         setLastScore(null); // clear old score before next prompt
-        const url = await postTts(out.aiUtterance.hanzi);
-        setAudioUrl(url);
-        await playAudio(url);
+        const url = await prefetchTts(out.aiUtterance.hanzi);
         dispatch({
           type: "AI_SPOKE",
           utterance: out.aiUtterance,
@@ -247,6 +246,7 @@ export default function Page() {
           pairId: out.pairId,
           isNewPhrase: out.isNewPhrase,
         });
+        await playAudio(url);
       }
     } finally { setBusy(false); }
   }
