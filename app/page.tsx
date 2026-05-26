@@ -119,6 +119,11 @@ export default function Page() {
       setBusy(true);
       try {
         const { transcript } = await postTranscribe(blob);
+        if (!transcript || !transcript.trim()) {
+          // Azure heard nothing — keep the user in free-form mode and prompt retry.
+          setRetryHint("I didn't catch that. Hold space and try again.");
+          return;
+        }
         dispatch({ type: "USER_FREEFORM", transcript });
         const out = await fetchTurn({
           history: state.history,
