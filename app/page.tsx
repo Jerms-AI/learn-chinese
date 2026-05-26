@@ -132,6 +132,23 @@ export default function Page() {
         passed,
         tier,
       });
+
+      // Compute what the mastery WILL be after the reducer applies this attempt,
+      // and send THAT to the orchestrator. The state closure here is pre-dispatch,
+      // so without this the orchestrator can't see the attempt that just landed
+      // (e.g. won't recognize that the third green just made this pair mastered).
+      const nextMastery = state.currentPairId && tier
+        ? {
+            ...state.mastery,
+            [state.currentPairId]: {
+              lastTiers: [...(state.mastery[state.currentPairId]?.lastTiers ?? []), tier].slice(-3),
+              attempts: (state.mastery[state.currentPairId]?.attempts ?? 0) + 1,
+              correct: (state.mastery[state.currentPairId]?.correct ?? 0) + (tier !== "red" ? 1 : 0),
+              lastSeenAt: Date.now(),
+            },
+          }
+        : state.mastery;
+
       const out = await fetchTurn({
         history: state.history,
         lastUserScore: scoreShape,
@@ -140,7 +157,7 @@ export default function Page() {
         isRetry: inTutor,
         currentPairId: state.currentPairId,
         introducedIds: state.introducedIds,
-        mastery: state.mastery,
+        mastery: nextMastery,
       });
 
       if (out.routeTo === "tutor" && out.tutorPayload) {
