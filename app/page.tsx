@@ -141,18 +141,21 @@ export default function Page() {
         if (out.userAugmented) {
           setUserFreeFormPhrase(out.userAugmented);
         }
-        // Pre-fetch each utterance's TTS BEFORE dispatching the UI update, so
-        // text + audio land together (no silent gap while Azure synthesizes).
+        // Kick off BOTH TTS fetches in parallel — by the time the response
+        // finishes playing, the next-phrase audio is almost certainly ready.
+        const respPromise = out.aiResponse ? prefetchTts(out.aiResponse.hanzi) : Promise.resolve<string | null>(null);
+        const utterPromise = out.aiUtterance ? prefetchTts(out.aiUtterance.hanzi) : Promise.resolve<string | null>(null);
+
         if (out.aiResponse) {
-          const url = await prefetchTts(out.aiResponse.hanzi);
+          const url = await respPromise;
           dispatch({ type: "AI_RESPONDED_FREEFORM", utterance: out.aiResponse });
-          await playAudio(url);
+          if (url) await playAudio(url);
           await new Promise((r) => setTimeout(r, 1200));
         }
         if (out.aiUtterance) {
           setLastScore(null);
           setUserFreeFormPhrase(null); // clear once we transition to next scripted Q
-          const url = await prefetchTts(out.aiUtterance.hanzi);
+          const url = await utterPromise; // likely already resolved by now
           dispatch({
             type: "AI_SPOKE",
             utterance: out.aiUtterance,
@@ -160,7 +163,7 @@ export default function Page() {
             pairId: out.pairId,
             isNewPhrase: out.isNewPhrase,
           });
-          await playAudio(url);
+          if (url) await playAudio(url);
         }
       } finally { setBusy(false); }
       return;

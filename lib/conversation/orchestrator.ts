@@ -3,7 +3,7 @@ import type { Turn, Score, Mastery } from "./state";
 import type { Phrase } from "@/lib/decks/schema";
 import { loadAllDecks } from "@/lib/decks/loader";
 import { pickPhraseProgressive } from "@/lib/decks/selector";
-import { getAnthropic, CLAUDE_MODEL } from "@/lib/providers/anthropic";
+import { getAnthropic, CLAUDE_HAIKU_MODEL } from "@/lib/providers/anthropic";
 
 export type OrchestratorInput = {
   history: Turn[];
@@ -170,8 +170,8 @@ async function generateFreeFormReply(ctx: FreeFormContext): Promise<FreeFormResu
   try {
     const client = getAnthropic();
     const resp = await client.messages.create({
-      model: CLAUDE_MODEL,
-      max_tokens: 350,
+      model: CLAUDE_HAIKU_MODEL,
+      max_tokens: 300,
       system: `You are a friendly Mandarin tutor. The user just said something free-form in Mandarin (transcribed as userSaid). After your reply, the system plays a scripted practice question (nextScriptedQ) which the user should answer with nextExpectedResponse.
 
 You MUST return TWO things in your JSON:
