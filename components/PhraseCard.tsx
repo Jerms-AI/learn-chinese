@@ -1,85 +1,28 @@
 "use client";
 import { Eye, EyeOff } from "lucide-react";
 import type { Phrase } from "@/lib/decks/schema";
-import type { Score, Tier } from "@/lib/conversation/state";
 import { TonedPinyin } from "./TonedPinyin";
-
-const TIER_TINT_BG: Record<Tier, string> = {
-  green: "bg-emerald-50",
-  yellow: "bg-lime-50",
-  orange: "bg-amber-50",
-  red: "bg-red-50",
-};
-
-const TIER_RING: Record<Tier, string> = {
-  green: "ring-emerald-300",
-  yellow: "ring-lime-300",
-  orange: "ring-amber-300",
-  red: "ring-red-300",
-};
-
-function accuracyColor(n: number): string {
-  if (n >= 90) return "text-emerald-700";
-  if (n >= 80) return "text-lime-700";
-  if (n >= 70) return "text-amber-600";
-  return "text-red-600";
-}
-
-function ScoredHanzi({ score, fallbackHanzi }: { score: Score; fallbackHanzi: string }) {
-  if (score.words.length === 0) {
-    return <span className="font-serif text-4xl">{fallbackHanzi}</span>;
-  }
-  return (
-    <span className="inline-flex flex-wrap items-end justify-center gap-x-1">
-      {score.words.map((w, i) => (
-        <span key={i} className="inline-flex flex-col items-center mx-0.5">
-          <span className={`text-[10px] font-medium leading-none ${accuracyColor(w.accuracy)}`}>
-            {w.accuracy}
-          </span>
-          <span className="font-serif text-4xl leading-tight">{w.word}</span>
-        </span>
-      ))}
-    </span>
-  );
-}
 
 export function PhraseCard({
   phrase,
-  expectedResponse,
-  lastScore,
   isNew = false,
-  latestTier = null,
   hideTranslations = false,
-  isFreeForm = false,
   userJustAsked,
   onToggleTranslations,
   onReplay,
 }: {
   phrase: Phrase;
-  expectedResponse?: Phrase;
-  lastScore?: Score | null;
   /** True the very first time this phrase is shown to the user. */
   isNew?: boolean;
-  /** Latest attempt tier — used to tint the "your line" section. */
-  latestTier?: Tier | null;
-  /** When true, hides pinyin + English on both prompt and response. Hanzi only. */
+  /** When true, hides pinyin + English so only hanzi shows. */
   hideTranslations?: boolean;
   /** Toggle handler for the eye icon. */
   onToggleTranslations?: () => void;
-  /** When true, the "your line" section shows an "ask a question" prompt instead
-   * of the scripted response — the loop is waiting for free-form input. */
-  isFreeForm?: boolean;
-  /** The user's most recent free-form question — hanzi + pinyin + english.
-   * When set, takes over the "your line" slot so the user sees what was heard. */
+  /** The user's most recent transcribed input. When set, fills the "your line"
+   * slot. When null, the "your line" slot shows a prompt to speak. */
   userJustAsked?: Phrase | null;
   onReplay?: () => void;
 }) {
-  // showsAnswer = the user has a distinct expected response.
-  // repeatMode = the AI said something the user repeats verbatim (statement-only pair).
-  // Both should render the "your line" section so the user knows what to do.
-  const showsAnswer = !!expectedResponse && expectedResponse.hanzi !== phrase.hanzi;
-  const repeatMode = !!expectedResponse && expectedResponse.hanzi === phrase.hanzi;
-
   return (
     <div className="rounded-2xl bg-card p-10 shadow-sm relative">
       <div className="absolute top-4 right-4 flex items-center gap-2">
@@ -122,67 +65,35 @@ export function PhraseCard({
         )}
       </div>
 
-      {(showsAnswer || repeatMode || isFreeForm || userJustAsked) && (
-        <div
-          className={`mt-8 pt-6 px-4 pb-4 -mx-4 border-t border-dashed text-center rounded-md transition-colors ${
-            isFreeForm ? "bg-terracotta/5 ring-1 ring-terracotta/20" :
-            userJustAsked ? "bg-ink-soft/5 ring-1 ring-ink-soft/15" :
-            lastScore && latestTier ? `${TIER_TINT_BG[latestTier]} ring-1 ${TIER_RING[latestTier]}` : ""
-          }`}
-        >
-          <div className="flex items-center justify-center gap-3 mb-3">
-            <span className="text-xs uppercase tracking-widest text-terracotta">your line</span>
-            {!isFreeForm && !userJustAsked && lastScore && (
-              <span className={`text-xs font-medium ${accuracyColor(lastScore.accuracy)}`}>
-                overall {lastScore.accuracy} · tones {lastScore.tonesOk ? "✓" : "✗"}
-              </span>
-            )}
-            {userJustAsked && (
-              <span className="text-xs italic text-ink-soft">(free-form — not graded)</span>
-            )}
-            {repeatMode && !lastScore && (
-              <span className="text-xs italic text-ink-soft">(repeat what they said)</span>
-            )}
-          </div>
-          {userJustAsked ? (
-            <>
-              <div className="font-serif text-4xl leading-tight">{userJustAsked.hanzi}</div>
-              {!hideTranslations && (
-                <>
-                  <div className="mt-2 text-lg">
-                    <TonedPinyin text={userJustAsked.pinyin} />
-                  </div>
-                  <div className="mt-1 text-sm text-ink-soft">{userJustAsked.english}</div>
-                </>
-              )}
-            </>
-          ) : isFreeForm ? (
-            <div className="py-2 text-sm text-ink-soft">
-              Your turn — hold space and respond in Mandarin.
-            </div>
-          ) : repeatMode && !lastScore ? (
-            <div className="py-2 text-sm text-ink-soft">
-              Hold space and say the phrase above.
-            </div>
-          ) : (
-            <>
-              {lastScore ? (
-                <ScoredHanzi score={lastScore} fallbackHanzi={expectedResponse!.hanzi} />
-              ) : (
-                <div className="font-serif text-4xl leading-tight">{expectedResponse!.hanzi}</div>
-              )}
-              {!hideTranslations && (
-                <>
-                  <div className="mt-2 text-lg">
-                    <TonedPinyin text={expectedResponse!.pinyin} />
-                  </div>
-                  <div className="mt-1 text-sm text-ink-soft">{expectedResponse!.english}</div>
-                </>
-              )}
-            </>
+      <div
+        className={`mt-8 pt-6 px-4 pb-4 -mx-4 border-t border-dashed text-center rounded-md transition-colors ${
+          userJustAsked ? "bg-ink-soft/5 ring-1 ring-ink-soft/15" : "bg-terracotta/5 ring-1 ring-terracotta/20"
+        }`}
+      >
+        <div className="flex items-center justify-center gap-3 mb-3">
+          <span className="text-xs uppercase tracking-widest text-terracotta">your line</span>
+          {userJustAsked && (
+            <span className="text-xs italic text-ink-soft">(free-form)</span>
           )}
         </div>
-      )}
+        {userJustAsked ? (
+          <>
+            <div className="font-serif text-4xl leading-tight">{userJustAsked.hanzi}</div>
+            {!hideTranslations && (
+              <>
+                <div className="mt-2 text-lg">
+                  <TonedPinyin text={userJustAsked.pinyin} />
+                </div>
+                <div className="mt-1 text-sm text-ink-soft">{userJustAsked.english}</div>
+              </>
+            )}
+          </>
+        ) : (
+          <div className="py-2 text-sm text-ink-soft">
+            Your turn — hold space and respond in Mandarin.
+          </div>
+        )}
+      </div>
     </div>
   );
 }

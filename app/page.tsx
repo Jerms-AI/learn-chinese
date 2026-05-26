@@ -360,25 +360,16 @@ export default function Page() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
         <div className="space-y-8">
-          {state.pendingPhrase && (() => {
-            const currentTiers = state.currentPairId ? state.mastery[state.currentPairId]?.lastTiers ?? [] : [];
-            const latest = currentTiers[currentTiers.length - 1] ?? null;
-            const isFreeForm = state.mode === "awaiting-user-question";
-            return (
-              <PhraseCard
-                phrase={state.pendingPhrase}
-                expectedResponse={state.expectedResponse}
-                lastScore={isFreeForm ? null : lastScore}
-                isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
-                latestTier={latest}
-                hideTranslations={hideTranslations}
-                isFreeForm={isFreeForm}
-                userJustAsked={userFreeFormPhrase}
-                onToggleTranslations={() => setHideTranslations((v) => !v)}
-                onReplay={() => audioUrl && playAudio(audioUrl)}
-              />
-            );
-          })()}
+          {state.pendingPhrase && (
+            <PhraseCard
+              phrase={state.pendingPhrase}
+              isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
+              hideTranslations={hideTranslations}
+              userJustAsked={userFreeFormPhrase}
+              onToggleTranslations={() => setHideTranslations((v) => !v)}
+              onReplay={() => audioUrl && playAudio(audioUrl)}
+            />
+          )}
 
           {tutor && (
             <div className="rounded-md border-l-4 border-terracotta bg-terracotta/5 px-4 py-3 flex items-center justify-between gap-3">
