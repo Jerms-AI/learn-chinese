@@ -18,11 +18,16 @@ export type OrchestratorInput = {
   /** Comprehensible-input state: which pairs the learner has been introduced to + their mastery records. */
   introducedIds?: string[];
   mastery?: Record<string, Mastery>;
+  /** When set, the user just spoke free-form Mandarin (not a scripted answer).
+   * The orchestrator should produce a natural response AND choose the next scripted Q. */
+  userFreeFormTranscript?: string;
   mock?: boolean;
 };
 
 export type OrchestratorOutput = {
   speakerNext: "ai" | "user";
+  /** Optional free-form natural response from the AI, played BEFORE the scripted aiUtterance. */
+  aiResponse?: Phrase;
   aiUtterance?: Phrase & { audioUrl: string };
   /** What the user should say next. Used as the reference text for Azure pronunciation scoring. */
   expectedUserResponse?: Phrase;
@@ -50,6 +55,24 @@ export type OrchestratorOutput = {
 const PASS_THRESHOLD = 80;        // full-sentence attempts
 const RETRY_PASS_THRESHOLD = 65;  // single-character drills in tutor mode
 const COMPLETENESS_FLOOR = 50;    // below this, treat as "didn't catch most of it"
+
+/** Pick the next scripted phrase for the user to practice (shared by mock + Claude branches). */
+async function pickNextScripted(input: OrchestratorInput) {
+  const decks = await loadAllDecks(path.join(process.cwd(), "decks"));
+  const filtered = input.activeDeckIds.length > 0
+    ? decks.filter((d) => input.activeDeckIds.includes(d.deck.id))
+    : decks;
+  const { pair, isNew } = pickPhraseProgressive(filtered.length > 0 ? filtered : decks, {
+    introducedIds: input.introducedIds ?? [],
+    mastery: input.mastery ?? {},
+    avoidId: input.currentPairId,
+  });
+
+  const flipRole = !isNew && pair.q && pair.a && Math.random() < 0.5;
+  const aiSays = flipRole ? pair.a! : (pair.q ?? pair.statement!);
+  const userSays = flipRole ? pair.q! : (pair.a ?? pair.statement ?? aiSays);
+  return { pair, isNew, aiSays, userSays };
+}
 
 async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorOutput> {
   const threshold = input.isRetry ? RETRY_PASS_THRESHOLD : PASS_THRESHOLD;
@@ -84,30 +107,21 @@ async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorO
     };
   }
 
-  const decks = await loadAllDecks(path.join(process.cwd(), "decks"));
-  const filtered = input.activeDeckIds.length > 0
-    ? decks.filter((d) => input.activeDeckIds.includes(d.deck.id))
-    : decks;
-  const { pair, isNew } = pickPhraseProgressive(filtered.length > 0 ? filtered : decks, {
-    introducedIds: input.introducedIds ?? [],
-    mastery: input.mastery ?? {},
-    avoidId: input.currentPairId,
-  });
+  const { pair, isNew, aiSays, userSays } = await pickNextScripted(input);
 
-  // For Q/A pairs, flip the role half the time so the user practices both
-  // answering (AI asks q → user says a) and asking (AI says a → user says q).
-  // Statement-only pairs (e.g. "thank you") always have user repeat the statement.
-  // Newly-introduced pairs are NOT flipped — easier for the learner to encounter
-  // a new phrase in its natural q→a direction first.
-  const flipRole = !isNew && pair.q && pair.a && Math.random() < 0.5;
-  const aiSays = flipRole ? pair.a! : (pair.q ?? pair.statement!);
-  const userSays = flipRole ? pair.q! : (pair.a ?? pair.statement ?? aiSays);
+  // Free-form branch: user just asked something. Append a brief ack response,
+  // then transition into the next scripted Q. Real conversational reasoning
+  // requires Claude; this is a pleasant fallback when no API key is set.
+  const aiResponse = input.userFreeFormTranscript
+    ? { hanzi: "好的。", pinyin: "hǎo de.", english: "OK." }
+    : undefined;
 
   return {
     speakerNext: "ai",
     routeTo: "conversation",
     pairId: pair.id,
     isNewPhrase: isNew,
+    aiResponse,
     aiUtterance: {
       hanzi: aiSays.hanzi,
       pinyin: aiSays.pinyin,
@@ -138,6 +152,7 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
     lastUserScore: input.lastUserScore,
     availablePhrases,
     metaIntent: input.metaIntent,
+    userFreeFormTranscript: input.userFreeFormTranscript,
   });
 
   const resp = await client.messages.create({
@@ -178,6 +193,7 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
     return {
       speakerNext: "ai",
       routeTo: "conversation",
+      aiResponse: decision.aiResponse,
       aiUtterance: { ...decision.aiUtterance, audioUrl: "/mocks/silence.mp3" },
       expectedUserResponse: decision.expectedUserResponse,
     };

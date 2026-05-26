@@ -19,7 +19,8 @@ export type Score = {
 
 export type Turn =
   | { speaker: "ai"; text: string; phrase: Phrase; at: number }
-  | { speaker: "user"; text: string; score: Score; at: number };
+  | { speaker: "user"; text: string; score: Score; at: number }
+  | { speaker: "user-freeform"; text: string; at: number };
 
 export type Tier = "red" | "orange" | "yellow" | "green";
 
@@ -74,6 +75,7 @@ export type Event =
   | { type: "START" }
   | { type: "AI_SPOKE"; utterance: Phrase; expectedResponse?: Phrase; pairId?: string; isNewPhrase?: boolean }
   | { type: "USER_UTTERANCE"; transcript: string; score: Score; passed: boolean; tier?: Tier | null }
+  | { type: "USER_FREEFORM"; transcript: string }
   | { type: "AI_CONFIRMED" }
   | { type: "TUTOR_RESOLVED" }
   | { type: "RESET" }
@@ -158,6 +160,11 @@ export function applyEvent(s: State, e: Event): State {
 
     case "AI_CONFIRMED":
       return { ...s, mode: "awaiting-user-question", nextSpeaker: "user", pendingPhrase: undefined, expectedResponse: undefined, currentPairId: undefined };
+
+    case "USER_FREEFORM": {
+      const turn: Turn = { speaker: "user-freeform", text: e.transcript, at: Date.now() };
+      return { ...s, history: [...s.history, turn] };
+    }
 
     case "TUTOR_RESOLVED":
       return { ...s, mode: "awaiting-user-question", nextSpeaker: "user" };

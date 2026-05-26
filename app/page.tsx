@@ -6,7 +6,7 @@ import { TutorPanel, type TutorPayload } from "@/components/TutorPanel";
 import { IntroducedList } from "@/components/IntroducedList";
 import { applyEvent, initialState, tierFromAvgAccuracy, avgWordAccuracy, type Score } from "@/lib/conversation/state";
 import { saveState, loadState, clearState } from "@/lib/conversation/persistence";
-import { fetchTurn, postScore, postTts } from "@/lib/api-client";
+import { fetchTurn, postScore, postTts, postTranscribe } from "@/lib/api-client";
 
 function reducer(s: ReturnType<typeof initialState>, e: Parameters<typeof applyEvent>[1]) {
   return applyEvent(s, e);
@@ -96,8 +96,53 @@ export default function Page() {
     } finally { setBusy(false); }
   }
 
+  // Helper: play an utterance via TTS and wait for it to finish.
+  async function speakAndDispatch(utterance: { hanzi: string; pinyin: string; english: string }, opts: { dispatchAfter?: () => void } = {}) {
+    const url = await postTts(utterance.hanzi);
+    setAudioUrl(url);
+    await playAudio(url);
+    opts.dispatchAfter?.();
+  }
+
   async function userSpoke(blob: Blob) {
     const inTutor = !!tutor;
+    const inFreeForm = !inTutor && state.mode === "awaiting-user-question";
+
+    // FREE-FORM PATH: user is asking anything. Transcribe → ask orchestrator
+    // for a natural reply + the next scripted Q.
+    if (inFreeForm) {
+      setBusy(true);
+      try {
+        const { transcript } = await postTranscribe(blob);
+        dispatch({ type: "USER_FREEFORM", transcript });
+        const out = await fetchTurn({
+          history: state.history,
+          lastUserScore: null,
+          activeDeckIds: selectedDeckId === "all" ? [] : [selectedDeckId],
+          metaIntent: null,
+          currentPairId: state.currentPairId,
+          introducedIds: state.introducedIds,
+          mastery: state.mastery,
+          userFreeFormTranscript: transcript,
+        });
+        if (out.aiResponse) {
+          await speakAndDispatch(out.aiResponse);
+        }
+        if (out.aiUtterance) {
+          setLastScore(null);
+          await speakAndDispatch(out.aiUtterance);
+          dispatch({
+            type: "AI_SPOKE",
+            utterance: out.aiUtterance,
+            expectedResponse: out.expectedUserResponse,
+            pairId: out.pairId,
+            isNewPhrase: out.isNewPhrase,
+          });
+        }
+      } finally { setBusy(false); }
+      return;
+    }
+
     // In tutor mode, the user is drilling a single character — score against THAT,
     // not the full sentence (otherwise the missing characters all score 0 and the
     // loop chases a different "worst word" each retry).
@@ -254,7 +299,7 @@ export default function Page() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
         <div className="space-y-8">
-          {state.pendingPhrase && (() => {
+          {state.pendingPhrase && state.mode !== "awaiting-user-question" && (() => {
             const currentTiers = state.currentPairId ? state.mastery[state.currentPairId]?.lastTiers ?? [] : [];
             const latest = currentTiers[currentTiers.length - 1] ?? null;
             return (
@@ -283,9 +328,9 @@ export default function Page() {
           )}
 
           {!tutor && state.mode === "awaiting-user-question" && (
-            <p className="text-center text-sm text-ink-soft">
-              Your turn — ask me something in Mandarin.
-            </p>
+            <div className="rounded-md border-l-4 border-terracotta bg-terracotta/5 px-4 py-3 text-sm text-ink-soft">
+              <span className="font-medium text-terracotta">Your turn —</span> ask me anything in Mandarin. Hold space and speak, then I&apos;ll respond and give you the next phrase to practice.
+            </div>
           )}
 
           {!tutor && retryHint && (
