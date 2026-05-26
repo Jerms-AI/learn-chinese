@@ -1,0 +1,231 @@
+deck:
+  id: hsk1
+  title: HSK 1 — practice phrases
+  source: phrases built from the publicly-documented HSK Level 1 vocabulary list (150 words)
+
+pairs:
+  # ── Identity / greetings ────────────────────────────────────────────────
+  - id: hsk1-001
+    q:
+      hanzi: 你好！
+      pinyin: nǐ hǎo!
+      english: Hello!
+    a:
+      hanzi: 你好，很高兴认识你。
+      pinyin: nǐ hǎo, hěn gāoxìng rènshi nǐ.
+      english: Hello, nice to meet you.
+    tags: [greetings]
+
+  - id: hsk1-002
+    q:
+      hanzi: 你叫什么名字？
+      pinyin: nǐ jiào shénme míngzi?
+      english: What's your name?
+    a:
+      hanzi: 我叫李明。
+      pinyin: wǒ jiào lǐ míng.
+      english: My name is Li Ming.
+    tags: [identity]
+
+  - id: hsk1-003
+    q:
+      hanzi: 他是谁？
+      pinyin: tā shì shéi?
+      english: Who is he?
+    a:
+      hanzi: 他是我的老师。
+      pinyin: tā shì wǒ de lǎoshī.
+      english: He is my teacher.
+    tags: [identity, people]
+
+  # ── Family ──────────────────────────────────────────────────────────────
+  - id: hsk1-004
+    q:
+      hanzi: 这是你妈妈吗？
+      pinyin: zhè shì nǐ māma ma?
+      english: Is this your mother?
+    a:
+      hanzi: 是，这是我妈妈。
+      pinyin: shì, zhè shì wǒ māma.
+      english: Yes, this is my mother.
+    tags: [family]
+
+  - id: hsk1-005
+    q:
+      hanzi: 你爸爸在家吗？
+      pinyin: nǐ bàba zài jiā ma?
+      english: Is your dad at home?
+    a:
+      hanzi: 他不在家，在工作。
+      pinyin: tā bú zài jiā, zài gōngzuò.
+      english: He's not home, he's at work.
+    tags: [family]
+
+  # ── Numbers / age ───────────────────────────────────────────────────────
+  - id: hsk1-006
+    q:
+      hanzi: 你有几个朋友？
+      pinyin: nǐ yǒu jǐ ge péngyou?
+      english: How many friends do you have?
+    a:
+      hanzi: 我有三个朋友。
+      pinyin: wǒ yǒu sān ge péngyou.
+      english: I have three friends.
+    tags: [numbers, people]
+
+  - id: hsk1-007
+    q:
+      hanzi: 你今年多大？
+      pinyin: nǐ jīnnián duō dà?
+      english: How old are you this year?
+    a:
+      hanzi: 我今年二十五岁。
+      pinyin: wǒ jīnnián èrshíwǔ suì.
+      english: I'm 25 this year.
+    tags: [age, numbers]
+
+  # ── Food / drink ────────────────────────────────────────────────────────
+  - id: hsk1-008
+    q:
+      hanzi: 你想吃什么？
+      pinyin: nǐ xiǎng chī shénme?
+      english: What do you want to eat?
+    a:
+      hanzi: 我想吃米饭。
+      pinyin: wǒ xiǎng chī mǐfàn.
+      english: I want to eat rice.
+    tags: [food]
+
+  - id: hsk1-009
+    q:
+      hanzi: 你喜欢喝茶吗？
+      pinyin: nǐ xǐhuan hē chá ma?
+      english: Do you like drinking tea?
+    a:
+      hanzi: 我很喜欢喝茶。
+      pinyin: wǒ hěn xǐhuan hē chá.
+      english: I really like drinking tea.
+    tags: [drink]
+
+  - id: hsk1-010
+    q:
+      hanzi: 你喜欢苹果吗？
+      pinyin: nǐ xǐhuan píngguǒ ma?
+      english: Do you like apples?
+    a:
+      hanzi: 我很喜欢苹果。
+      pinyin: wǒ hěn xǐhuan píngguǒ.
+      english: I like apples very much.
+    tags: [food]
+
+  # ── Time ────────────────────────────────────────────────────────────────
+  - id: hsk1-011
+    q:
+      hanzi: 现在几点？
+      pinyin: xiànzài jǐ diǎn?
+      english: What time is it now?
+    a:
+      hanzi: 现在九点。
+      pinyin: xiànzài jiǔ diǎn.
+      english: It's nine o'clock.
+    tags: [time]
+
+  - id: hsk1-012
+    q:
+      hanzi: 今天星期几？
+      pinyin: jīntiān xīngqī jǐ?
+      english: What day is it today?
+    a:
+      hanzi: 今天星期一。
+      pinyin: jīntiān xīngqī yī.
+      english: Today is Monday.
+    tags: [time]
+
+  # ── Place ───────────────────────────────────────────────────────────────
+  - id: hsk1-013
+    q:
+      hanzi: 你住在哪儿？
+      pinyin: nǐ zhù zài nǎr?
+      english: Where do you live?
+    a:
+      hanzi: 我住在北京。
+      pinyin: wǒ zhù zài běijīng.
+      english: I live in Beijing.
+    tags: [place]
+
+  - id: hsk1-014
+    q:
+      hanzi: 你的书在哪里？
+      pinyin: nǐ de shū zài nǎlǐ?
+      english: Where is your book?
+    a:
+      hanzi: 我的书在桌子上。
+      pinyin: wǒ de shū zài zhuōzi shàng.
+      english: My book is on the table.
+    tags: [place, objects]
+
+  # ── Money / shopping ────────────────────────────────────────────────────
+  - id: hsk1-015
+    q:
+      hanzi: 这个多少钱？
+      pinyin: zhège duōshao qián?
+      english: How much is this?
+    a:
+      hanzi: 十块钱。
+      pinyin: shí kuài qián.
+      english: Ten yuan.
+    tags: [money]
+
+  # ── Activities ──────────────────────────────────────────────────────────
+  - id: hsk1-016
+    q:
+      hanzi: 你在做什么？
+      pinyin: nǐ zài zuò shénme?
+      english: What are you doing?
+    a:
+      hanzi: 我在看书。
+      pinyin: wǒ zài kàn shū.
+      english: I'm reading a book.
+    tags: [activities]
+
+  - id: hsk1-017
+    q:
+      hanzi: 你会说汉语吗？
+      pinyin: nǐ huì shuō hànyǔ ma?
+      english: Can you speak Chinese?
+    a:
+      hanzi: 我会说一点儿汉语。
+      pinyin: wǒ huì shuō yìdiǎnr hànyǔ.
+      english: I can speak a little Chinese.
+    tags: [language]
+
+  - id: hsk1-018
+    q:
+      hanzi: 你认识他吗？
+      pinyin: nǐ rènshi tā ma?
+      english: Do you know him?
+    a:
+      hanzi: 我不认识他。
+      pinyin: wǒ bú rènshi tā.
+      english: I don't know him.
+    tags: [people]
+
+  # ── Feelings ────────────────────────────────────────────────────────────
+  - id: hsk1-019
+    q:
+      hanzi: 你今天高兴吗？
+      pinyin: nǐ jīntiān gāoxìng ma?
+      english: Are you happy today?
+    a:
+      hanzi: 我今天很高兴。
+      pinyin: wǒ jīntiān hěn gāoxìng.
+      english: I'm very happy today.
+    tags: [feelings]
+
+  # ── Goodbye ─────────────────────────────────────────────────────────────
+  - id: hsk1-020
+    statement:
+      hanzi: 再见！
+      pinyin: zàijiàn!
+      english: Goodbye!
+    tags: [greetings]

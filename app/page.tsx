@@ -21,6 +21,8 @@ export default function Page() {
   const [tutorAttempt, setTutorAttempt] = useState<Score | null>(null);
   const [retryHint, setRetryHint] = useState<string | null>(null);
   const [hideTranslations, setHideTranslations] = useState(false);
+  const [decks, setDecks] = useState<Array<{ id: string; title: string; pairCount: number }>>([]);
+  const [selectedDeckId, setSelectedDeckId] = useState<string>("all");
   const hydratedRef = useRef(false);
 
   // Hydrate state from localStorage AFTER mount so SSR + first client render agree.
@@ -32,8 +34,27 @@ export default function Page() {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional one-shot hydration from localStorage
       setHideTranslations(true);
     }
+    const savedDeck = localStorage.getItem("learn-chinese:active-deck:v1");
+    if (savedDeck) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional one-shot hydration from localStorage
+      setSelectedDeckId(savedDeck);
+    }
     hydratedRef.current = true;
   }, []);
+
+  // Load the available deck list once on mount.
+  useEffect(() => {
+    fetch("/api/decks")
+      .then((r) => r.json())
+      .then((data) => setDecks(data.decks ?? []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (hydratedRef.current) {
+      localStorage.setItem("learn-chinese:active-deck:v1", selectedDeckId);
+    }
+  }, [selectedDeckId]);
 
   useEffect(() => { if (hydratedRef.current) saveState(state); }, [state]);
 
@@ -54,7 +75,7 @@ export default function Page() {
       const out = await fetchTurn({
         history: state.history,
         lastUserScore: null,
-        activeDeckIds: [],
+        activeDeckIds: selectedDeckId === "all" ? [] : [selectedDeckId],
         metaIntent,
         currentPairId: state.currentPairId,
         introducedIds: state.introducedIds,
@@ -114,7 +135,7 @@ export default function Page() {
       const out = await fetchTurn({
         history: state.history,
         lastUserScore: scoreShape,
-        activeDeckIds: [],
+        activeDeckIds: selectedDeckId === "all" ? [] : [selectedDeckId],
         metaIntent: null,
         isRetry: inTutor,
         currentPairId: state.currentPairId,
@@ -178,6 +199,20 @@ export default function Page() {
           )}
         </div>
         <div className="flex items-center gap-4">
+          <select
+            value={selectedDeckId}
+            onChange={(e) => setSelectedDeckId(e.target.value)}
+            disabled={busy}
+            className="text-xs bg-card border border-ink-soft/20 rounded-md px-2 py-1 text-ink hover:border-ink-soft/40 focus:outline-none focus:ring-1 focus:ring-terracotta"
+            aria-label="Active deck"
+          >
+            <option value="all">All decks</option>
+            {decks.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.title} ({d.pairCount})
+              </option>
+            ))}
+          </select>
           <button
             onClick={() => {
               if (confirm("Reset all progress (mastery, history, introduced phrases)?")) {

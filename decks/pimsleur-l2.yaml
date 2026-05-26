@@ -1,0 +1,176 @@
+deck:
+  id: pimsleur-l2
+  title: Pimsleur Mandarin II — starter
+  source: reconstructed from Pimsleur Mandarin Level 2 curriculum for personal study; expand as needed
+
+pairs:
+  # ── Family ──────────────────────────────────────────────────────────────
+  - id: pim-l2-001
+    q:
+      hanzi: 你太太在哪儿？
+      pinyin: nǐ tàitài zài nǎr?
+      english: Where is your wife?
+    a:
+      hanzi: 我太太在北京。
+      pinyin: wǒ tàitài zài běijīng.
+      english: My wife is in Beijing.
+    tags: [lesson-1, family]
+
+  - id: pim-l2-002
+    q:
+      hanzi: 你有孩子吗？
+      pinyin: nǐ yǒu háizi ma?
+      english: Do you have children?
+    a:
+      hanzi: 我有两个孩子。
+      pinyin: wǒ yǒu liǎng ge háizi.
+      english: I have two children.
+    tags: [lesson-2, family]
+
+  - id: pim-l2-003
+    q:
+      hanzi: 你的孩子多大？
+      pinyin: nǐ de háizi duō dà?
+      english: How old are your children?
+    a:
+      hanzi: 一个五岁，一个八岁。
+      pinyin: yí ge wǔ suì, yí ge bā suì.
+      english: One is five, one is eight.
+    tags: [lesson-3, family, age]
+
+  - id: pim-l2-004
+    q:
+      hanzi: 你先生做什么工作？
+      pinyin: nǐ xiānsheng zuò shénme gōngzuò?
+      english: What does your husband do for work?
+    a:
+      hanzi: 他是老师。
+      pinyin: tā shì lǎoshī.
+      english: He is a teacher.
+    tags: [lesson-4, family, work]
+
+  # ── Transportation ──────────────────────────────────────────────────────
+  - id: pim-l2-005
+    q:
+      hanzi: 我们怎么去？
+      pinyin: wǒmen zěnme qù?
+      english: How do we get there?
+    a:
+      hanzi: 我们坐出租车。
+      pinyin: wǒmen zuò chūzūchē.
+      english: We'll take a taxi.
+    tags: [lesson-5, transportation]
+
+  - id: pim-l2-006
+    q:
+      hanzi: 公共汽车在哪儿？
+      pinyin: gōnggòng qìchē zài nǎr?
+      english: Where is the bus?
+    a:
+      hanzi: 在那边。
+      pinyin: zài nàbiān.
+      english: It's over there.
+    tags: [lesson-6, transportation]
+
+  - id: pim-l2-007
+    q:
+      hanzi: 请问，去机场怎么走？
+      pinyin: qǐng wèn, qù jīchǎng zěnme zǒu?
+      english: Excuse me, how do I get to the airport?
+    a:
+      hanzi: 一直往前走。
+      pinyin: yìzhí wǎng qián zǒu.
+      english: Keep going straight ahead.
+    tags: [lesson-7, directions]
+
+  # ── Hotel ───────────────────────────────────────────────────────────────
+  - id: pim-l2-008
+    q:
+      hanzi: 你住哪个旅馆？
+      pinyin: nǐ zhù nǎ ge lǚguǎn?
+      english: Which hotel are you staying at?
+    a:
+      hanzi: 我住北京饭店。
+      pinyin: wǒ zhù běijīng fàndiàn.
+      english: I'm staying at the Beijing Hotel.
+    tags: [lesson-8, hotel]
+
+  - id: pim-l2-009
+    q:
+      hanzi: 你的房间号码是多少？
+      pinyin: nǐ de fángjiān hàomǎ shì duōshao?
+      english: What's your room number?
+    a:
+      hanzi: 我的房间是三零五。
+      pinyin: wǒ de fángjiān shì sān líng wǔ.
+      english: My room is 305.
+    tags: [lesson-9, hotel, numbers]
+
+  # ── Telephone ───────────────────────────────────────────────────────────
+  - id: pim-l2-010
+    q:
+      hanzi: 你的电话号码是多少？
+      pinyin: nǐ de diànhuà hàomǎ shì duōshao?
+      english: What's your phone number?
+    a:
+      hanzi: 我的电话是一三八。
+      pinyin: wǒ de diànhuà shì yāo sān bā.
+      english: My phone number is 138...
+    tags: [lesson-10, telephone, numbers]
+
+  - id: pim-l2-011
+    q:
+      hanzi: 我可以给你打电话吗？
+      pinyin: wǒ kěyǐ gěi nǐ dǎ diànhuà ma?
+      english: May I call you?
+    a:
+      hanzi: 当然可以。
+      pinyin: dāngrán kěyǐ.
+      english: Of course you may.
+    tags: [lesson-11, telephone]
+
+  # ── Plans ───────────────────────────────────────────────────────────────
+  - id: pim-l2-012
+    q:
+      hanzi: 你明天有时间吗？
+      pinyin: nǐ míngtiān yǒu shíjiān ma?
+      english: Do you have time tomorrow?
+    a:
+      hanzi: 明天我有时间。
+      pinyin: míngtiān wǒ yǒu shíjiān.
+      english: I have time tomorrow.
+    tags: [lesson-12, plans]
+
+  - id: pim-l2-013
+    q:
+      hanzi: 我们什么时候见面？
+      pinyin: wǒmen shénme shíhou jiànmiàn?
+      english: When shall we meet?
+    a:
+      hanzi: 明天下午两点。
+      pinyin: míngtiān xiàwǔ liǎng diǎn.
+      english: Tomorrow afternoon at two.
+    tags: [lesson-13, plans, time]
+
+  # ── Weather ─────────────────────────────────────────────────────────────
+  - id: pim-l2-014
+    q:
+      hanzi: 今天天气怎么样？
+      pinyin: jīntiān tiānqì zěnmeyàng?
+      english: How's the weather today?
+    a:
+      hanzi: 今天很热。
+      pinyin: jīntiān hěn rè.
+      english: It's very hot today.
+    tags: [lesson-14, weather]
+
+  - id: pim-l2-015
+    q:
+      hanzi: 北京冷不冷？
+      pinyin: běijīng lěng bu lěng?
+      english: Is Beijing cold?
+    a:
+      hanzi: 冬天很冷。
+      pinyin: dōngtiān hěn lěng.
+      english: It's very cold in winter.
+    tags: [lesson-15, weather]

@@ -1,0 +1,170 @@
+deck:
+  id: hsk2
+  title: HSK 2 — practice phrases
+  source: phrases built from the publicly-documented HSK Level 2 vocabulary list
+
+pairs:
+  - id: hsk2-001
+    q:
+      hanzi: 你今天为什么不去上班？
+      pinyin: nǐ jīntiān wèishénme bú qù shàngbān?
+      english: Why aren't you going to work today?
+    a:
+      hanzi: 因为我生病了。
+      pinyin: yīnwèi wǒ shēngbìng le.
+      english: Because I got sick.
+    tags: [work, feelings]
+
+  - id: hsk2-002
+    q:
+      hanzi: 你的房间是什么颜色的？
+      pinyin: nǐ de fángjiān shì shénme yánsè de?
+      english: What color is your room?
+    a:
+      hanzi: 我的房间是白色的。
+      pinyin: wǒ de fángjiān shì bái sè de.
+      english: My room is white.
+    tags: [colors, place]
+
+  - id: hsk2-003
+    q:
+      hanzi: 你想喝什么颜色的饮料？
+      pinyin: nǐ xiǎng hē shénme yánsè de yǐnliào?
+      english: What color drink do you want?
+    a:
+      hanzi: 我想喝红色的。
+      pinyin: wǒ xiǎng hē hóng sè de.
+      english: I want the red one.
+    tags: [colors, drink]
+
+  - id: hsk2-004
+    q:
+      hanzi: 我们公司在哪儿？
+      pinyin: wǒmen gōngsī zài nǎr?
+      english: Where's our company?
+    a:
+      hanzi: 在火车站旁边。
+      pinyin: zài huǒchēzhàn pángbiān.
+      english: Next to the train station.
+    tags: [work, place]
+
+  - id: hsk2-005
+    q:
+      hanzi: 你每天都跑步吗？
+      pinyin: nǐ měi tiān dōu pǎobù ma?
+      english: Do you run every day?
+    a:
+      hanzi: 我每天早上跑步。
+      pinyin: wǒ měi tiān zǎoshang pǎobù.
+      english: I run every morning.
+    tags: [activities, time]
+
+  - id: hsk2-006
+    q:
+      hanzi: 你为什么这么忙？
+      pinyin: nǐ wèishénme zhème máng?
+      english: Why are you so busy?
+    a:
+      hanzi: 因为公司有很多工作。
+      pinyin: yīnwèi gōngsī yǒu hěn duō gōngzuò.
+      english: Because the company has a lot of work.
+    tags: [work, feelings]
+
+  - id: hsk2-007
+    q:
+      hanzi: 你妹妹比你大吗？
+      pinyin: nǐ mèimei bǐ nǐ dà ma?
+      english: Is your younger sister older than you?
+    a:
+      hanzi: 不是，她比我小三岁。
+      pinyin: bú shì, tā bǐ wǒ xiǎo sān suì.
+      english: No, she's three years younger than me.
+    tags: [family, comparisons]
+
+  - id: hsk2-008
+    q:
+      hanzi: 你昨天做什么了？
+      pinyin: nǐ zuótiān zuò shénme le?
+      english: What did you do yesterday?
+    a:
+      hanzi: 我跟朋友去看电影了。
+      pinyin: wǒ gēn péngyou qù kàn diànyǐng le.
+      english: I went to a movie with friends.
+    tags: [past, activities]
+
+  - id: hsk2-009
+    q:
+      hanzi: 你听过这首歌吗？
+      pinyin: nǐ tīng guo zhè shǒu gē ma?
+      english: Have you heard this song?
+    a:
+      hanzi: 听过，我很喜欢。
+      pinyin: tīng guo, wǒ hěn xǐhuan.
+      english: Yes, I really like it.
+    tags: [music, experience]
+
+  - id: hsk2-010
+    q:
+      hanzi: 你的房子离公司远不远？
+      pinyin: nǐ de fángzi lí gōngsī yuǎn bu yuǎn?
+      english: Is your house far from the company?
+    a:
+      hanzi: 不太远，走路十分钟。
+      pinyin: bú tài yuǎn, zǒulù shí fēnzhōng.
+      english: Not too far, ten minutes' walk.
+    tags: [place, time]
+
+  - id: hsk2-011
+    q:
+      hanzi: 你想去旅游吗？
+      pinyin: nǐ xiǎng qù lǚyóu ma?
+      english: Do you want to travel?
+    a:
+      hanzi: 我想去日本旅游。
+      pinyin: wǒ xiǎng qù rìběn lǚyóu.
+      english: I want to travel to Japan.
+    tags: [travel]
+
+  - id: hsk2-012
+    q:
+      hanzi: 你哥哥结婚了吗？
+      pinyin: nǐ gēge jiéhūn le ma?
+      english: Is your older brother married?
+    a:
+      hanzi: 还没有，他还在读书。
+      pinyin: hái méiyǒu, tā hái zài dúshū.
+      english: Not yet, he's still studying.
+    tags: [family]
+
+  - id: hsk2-013
+    q:
+      hanzi: 你最喜欢哪个季节？
+      pinyin: nǐ zuì xǐhuan nǎ ge jìjié?
+      english: Which season do you like best?
+    a:
+      hanzi: 我最喜欢秋天。
+      pinyin: wǒ zuì xǐhuan qiūtiān.
+      english: I like autumn best.
+    tags: [seasons]
+
+  - id: hsk2-014
+    q:
+      hanzi: 你买了什么？
+      pinyin: nǐ mǎi le shénme?
+      english: What did you buy?
+    a:
+      hanzi: 我买了一件新衣服。
+      pinyin: wǒ mǎi le yí jiàn xīn yīfu.
+      english: I bought a new piece of clothing.
+    tags: [shopping, past]
+
+  - id: hsk2-015
+    q:
+      hanzi: 你觉得汉语难不难？
+      pinyin: nǐ juéde hànyǔ nán bu nán?
+      english: Do you think Chinese is hard?
+    a:
+      hanzi: 写汉字很难。
+      pinyin: xiě hànzì hěn nán.
+      english: Writing characters is hard.
+    tags: [language, opinion]
