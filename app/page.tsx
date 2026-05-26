@@ -22,7 +22,6 @@ export default function Page() {
   const [tutorAttempt, setTutorAttempt] = useState<Score | null>(null);
   const [retryHint, setRetryHint] = useState<string | null>(null);
   const [hideTranslations, setHideTranslations] = useState(false);
-  const [userFreeFormPhrase, setUserFreeFormPhrase] = useState<{ hanzi: string; pinyin: string; english: string } | null>(null);
   const [decks, setDecks] = useState<Array<{ id: string; title: string; pairCount: number }>>([]);
   const [selectedDeckId, setSelectedDeckId] = useState<string>("all");
   const hydratedRef = useRef(false);
@@ -137,10 +136,6 @@ export default function Page() {
           mastery: state.mastery,
           userFreeFormTranscript: transcript,
         });
-        // Capture Claude's augmented version of what the user said (pinyin + english).
-        if (out.userAugmented) {
-          setUserFreeFormPhrase(out.userAugmented);
-        }
         // Single combined utterance: AI's response + follow-up question in one
         // piece. No separate scripted Q to play afterward — pure ping-pong.
         if (out.aiUtterance) {
@@ -365,7 +360,6 @@ export default function Page() {
               phrase={state.pendingPhrase}
               isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
               hideTranslations={hideTranslations}
-              userJustAsked={userFreeFormPhrase}
               onToggleTranslations={() => setHideTranslations((v) => !v)}
               onReplay={() => audioUrl && playAudio(audioUrl)}
             />

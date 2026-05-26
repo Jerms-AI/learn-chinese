@@ -7,7 +7,6 @@ export function PhraseCard({
   phrase,
   isNew = false,
   hideTranslations = false,
-  userJustAsked,
   onToggleTranslations,
   onReplay,
 }: {
@@ -18,9 +17,6 @@ export function PhraseCard({
   hideTranslations?: boolean;
   /** Toggle handler for the eye icon. */
   onToggleTranslations?: () => void;
-  /** The user's most recent transcribed input. When set, fills the "your line"
-   * slot. When null, the "your line" slot shows a prompt to speak. */
-  userJustAsked?: Phrase | null;
   onReplay?: () => void;
 }) {
   return (
@@ -44,7 +40,6 @@ export function PhraseCard({
       </div>
 
       <div className="text-center">
-        <div className="text-xs uppercase tracking-widest text-ink-soft mb-3">they said</div>
         <div className="font-serif text-6xl leading-tight tracking-wide">{phrase.hanzi}</div>
         {!hideTranslations && (
           <>
@@ -58,40 +53,10 @@ export function PhraseCard({
           <button
             aria-label="Replay phrase audio"
             onClick={onReplay}
-            className="mt-4 inline-flex items-center justify-center rounded-full p-2 hover:bg-parchment transition"
+            className="mt-5 inline-flex items-center justify-center rounded-full p-2 hover:bg-parchment transition"
           >
             🔊
           </button>
-        )}
-      </div>
-
-      <div
-        className={`mt-8 pt-6 px-4 pb-4 -mx-4 border-t border-dashed text-center rounded-md transition-colors ${
-          userJustAsked ? "bg-ink-soft/5 ring-1 ring-ink-soft/15" : "bg-terracotta/5 ring-1 ring-terracotta/20"
-        }`}
-      >
-        <div className="flex items-center justify-center gap-3 mb-3">
-          <span className="text-xs uppercase tracking-widest text-terracotta">your line</span>
-          {userJustAsked && (
-            <span className="text-xs italic text-ink-soft">(free-form)</span>
-          )}
-        </div>
-        {userJustAsked ? (
-          <>
-            <div className="font-serif text-4xl leading-tight">{userJustAsked.hanzi}</div>
-            {!hideTranslations && (
-              <>
-                <div className="mt-2 text-lg">
-                  <TonedPinyin text={userJustAsked.pinyin} />
-                </div>
-                <div className="mt-1 text-sm text-ink-soft">{userJustAsked.english}</div>
-              </>
-            )}
-          </>
-        ) : (
-          <div className="py-2 text-sm text-ink-soft">
-            Your turn — hold space and respond in Mandarin.
-          </div>
         )}
       </div>
     </div>
