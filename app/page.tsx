@@ -2,8 +2,6 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { PhraseCard } from "@/components/PhraseCard";
 import { MicButton } from "@/components/MicButton";
-import { ConversationRail } from "@/components/ConversationRail";
-import { MetaBar } from "@/components/MetaBar";
 import { TutorPanel, type TutorPayload } from "@/components/TutorPanel";
 import { IntroducedList } from "@/components/IntroducedList";
 import { applyEvent, initialState, tierFromAvgAccuracy, avgWordAccuracy, type Score } from "@/lib/conversation/state";
@@ -245,15 +243,6 @@ export default function Page() {
           )}
 
           {!tutor && <MicButton onAudio={userSpoke} />}
-
-          <MetaBar onMeta={(intent) => aiTurn(intent)} />
-
-          <section className="border-t pt-6">
-            <h2 className="text-sm uppercase tracking-wider text-ink-soft mb-3">Conversation</h2>
-            <div className="max-h-64 overflow-y-auto pr-2 rounded-md">
-              <ConversationRail turns={state.history} />
-            </div>
-          </section>
         </div>
 
         <IntroducedList
@@ -261,6 +250,7 @@ export default function Page() {
           phraseLibrary={state.phraseLibrary}
           mastery={state.mastery}
           currentPairId={state.currentPairId}
+          hideTranslations={hideTranslations}
         />
       </div>
     </main>

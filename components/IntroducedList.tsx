@@ -29,11 +29,13 @@ export function IntroducedList({
   phraseLibrary,
   mastery,
   currentPairId,
+  hideTranslations = false,
 }: {
   introducedIds: string[];
   phraseLibrary: Record<string, LibraryEntry>;
   mastery: Record<string, Mastery>;
   currentPairId?: string;
+  hideTranslations?: boolean;
 }) {
   return (
     <aside className="rounded-2xl bg-card p-6 shadow-sm h-fit sticky top-6">
@@ -74,18 +76,22 @@ export function IntroducedList({
                     <div className="font-serif text-lg leading-tight truncate">
                       {entry.prompt.hanzi}
                     </div>
-                    <div className="text-xs text-ink-soft/80 truncate">
-                      {entry.prompt.english}
-                    </div>
+                    {!hideTranslations && (
+                      <div className="text-xs text-ink-soft/80 truncate">
+                        {entry.prompt.english}
+                      </div>
+                    )}
                   </div>
                   {hasBothSides && (
                     <div className="pl-3 border-l-2 border-ink-soft/10">
                       <div className="font-serif text-base leading-tight truncate">
                         {entry.response!.hanzi}
                       </div>
-                      <div className="text-xs text-ink-soft/80 truncate">
-                        {entry.response!.english}
-                      </div>
+                      {!hideTranslations && (
+                        <div className="text-xs text-ink-soft/80 truncate">
+                          {entry.response!.english}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
