@@ -22,16 +22,28 @@ export default function Page() {
   const [lastScore, setLastScore] = useState<Score | null>(null);
   const [tutorAttempt, setTutorAttempt] = useState<Score | null>(null);
   const [retryHint, setRetryHint] = useState<string | null>(null);
+  const [hideTranslations, setHideTranslations] = useState(false);
   const hydratedRef = useRef(false);
 
   // Hydrate state from localStorage AFTER mount so SSR + first client render agree.
   useEffect(() => {
     const saved = loadState();
     if (saved) dispatch({ type: "REHYDRATE", state: saved });
+    const savedHide = localStorage.getItem("learn-chinese:hide-translations:v1");
+    if (savedHide === "1") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional one-shot hydration from localStorage
+      setHideTranslations(true);
+    }
     hydratedRef.current = true;
   }, []);
 
   useEffect(() => { if (hydratedRef.current) saveState(state); }, [state]);
+
+  useEffect(() => {
+    if (hydratedRef.current) {
+      localStorage.setItem("learn-chinese:hide-translations:v1", hideTranslations ? "1" : "0");
+    }
+  }, [hideTranslations]);
 
   async function playAudio(url: string) {
     const audio = new Audio(url);
@@ -202,6 +214,8 @@ export default function Page() {
                 lastScore={lastScore}
                 isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
                 latestTier={latest}
+                hideTranslations={hideTranslations}
+                onToggleTranslations={() => setHideTranslations((v) => !v)}
                 onReplay={() => audioUrl && playAudio(audioUrl)}
               />
             );
