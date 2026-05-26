@@ -299,17 +299,19 @@ export default function Page() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8">
         <div className="space-y-8">
-          {state.pendingPhrase && state.mode !== "awaiting-user-question" && (() => {
+          {state.pendingPhrase && (() => {
             const currentTiers = state.currentPairId ? state.mastery[state.currentPairId]?.lastTiers ?? [] : [];
             const latest = currentTiers[currentTiers.length - 1] ?? null;
+            const isFreeForm = state.mode === "awaiting-user-question";
             return (
               <PhraseCard
                 phrase={state.pendingPhrase}
                 expectedResponse={state.expectedResponse}
-                lastScore={lastScore}
+                lastScore={isFreeForm ? null : lastScore}
                 isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
                 latestTier={latest}
                 hideTranslations={hideTranslations}
+                isFreeForm={isFreeForm}
                 onToggleTranslations={() => setHideTranslations((v) => !v)}
                 onReplay={() => audioUrl && playAudio(audioUrl)}
               />
@@ -325,12 +327,6 @@ export default function Page() {
               onRetry={userSpoke}
               onSkip={() => { setTutor(null); setTutorAttempt(null); dispatch({ type: "TUTOR_RESOLVED" }); }}
             />
-          )}
-
-          {!tutor && state.mode === "awaiting-user-question" && (
-            <div className="rounded-md border-l-4 border-terracotta bg-terracotta/5 px-4 py-3 text-sm text-ink-soft">
-              <span className="font-medium text-terracotta">Your turn —</span> ask me anything in Mandarin. Hold space and speak, then I&apos;ll respond and give you the next phrase to practice.
-            </div>
           )}
 
           {!tutor && retryHint && (

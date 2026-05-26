@@ -107,6 +107,12 @@ async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorO
     };
   }
 
+  // PASS branch with no free-form input yet: don't auto-advance to the next
+  // scripted Q. Hand the floor to the user so they can ask something first.
+  if (input.lastUserScore && !input.userFreeFormTranscript) {
+    return { speakerNext: "user", routeTo: "conversation" };
+  }
+
   const { pair, isNew, aiSays, userSays } = await pickNextScripted(input);
 
   // Free-form branch: user just asked something. Append a brief ack response,
