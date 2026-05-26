@@ -1,13 +1,12 @@
 "use client";
 import { useEffect, useReducer, useRef, useState } from "react";
-import { pinyin as toPinyin } from "pinyin-pro";
 import { PhraseCard } from "@/components/PhraseCard";
 import { TonedPinyin } from "@/components/TonedPinyin";
 import { MicButton } from "@/components/MicButton";
 import { IntroducedList } from "@/components/IntroducedList";
 import { applyEvent, initialState } from "@/lib/conversation/state";
 import { saveState, loadState, clearState } from "@/lib/conversation/persistence";
-import { fetchTurn, postTts } from "@/lib/api-client";
+import { fetchTurn, postTranscribe, postTts } from "@/lib/api-client";
 
 function reducer(s: ReturnType<typeof initialState>, e: Parameters<typeof applyEvent>[1]) {
   return applyEvent(s, e);
@@ -33,7 +32,6 @@ export default function Page() {
   const [retryHint, setRetryHint] = useState<string | null>(null);
   const [hideTranslations, setHideTranslations] = useState(false);
   const [userFreeFormPhrase, setUserFreeFormPhrase] = useState<{ hanzi: string; pinyin: string; english: string } | null>(null);
-  const [liveTranscript, setLiveTranscript] = useState("");
   const [decks, setDecks] = useState<Array<{ id: string; title: string; pairCount: number }>>([]);
   const [selectedDeckId, setSelectedDeckId] = useState<string>("all");
   const hydratedRef = useRef(false);
@@ -49,7 +47,6 @@ export default function Page() {
     }
     const savedDeck = localStorage.getItem("learn-chinese:active-deck:v1");
     if (savedDeck) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional one-shot hydration from localStorage
       setSelectedDeckId(savedDeck);
     }
     hydratedRef.current = true;
@@ -122,54 +119,44 @@ export default function Page() {
     return url;
   }
 
-  async function userSpoke(_blob: Blob, capturedTranscript: string) {
-    setLiveTranscript(""); // hide the "you're saying" interim box once mic releases
+  async function userSpoke(blob: Blob) {
     const inFreeForm = state.mode === "awaiting-user-question";
+    if (!inFreeForm) return;
 
-    // FREE-FORM PATH: use the Web Speech transcript captured during mic hold —
-    // no Azure round-trip. Azure couldn't reliably hear Mandarin tones anyway
-    // and the network hop added ~1-2s per turn.
-    if (inFreeForm) {
-      setBusy(true);
-      try {
-        const transcript = capturedTranscript.trim();
-        if (!transcript) {
-          // Browser heard nothing — keep the user in free-form mode and prompt retry.
-          setRetryHint("I didn't catch that. Hold space and try again.");
-          return;
-        }
-        dispatch({ type: "USER_FREEFORM", transcript });
-        const out = await fetchTurn({
-          history: state.history,
-          lastUserScore: null,
-          activeDeckIds: expandSelectedDeck(selectedDeckId),
-          metaIntent: null,
-          currentPairId: state.currentPairId,
-          introducedIds: state.introducedIds,
-          mastery: state.mastery,
-          userFreeFormTranscript: transcript,
+    setBusy(true);
+    try {
+      const { transcript } = await postTranscribe(blob);
+      const trimmed = transcript.trim();
+      if (!trimmed) {
+        setRetryHint("I didn't catch that. Hold space and try again.");
+        return;
+      }
+      dispatch({ type: "USER_FREEFORM", transcript: trimmed });
+      const out = await fetchTurn({
+        history: state.history,
+        lastUserScore: null,
+        activeDeckIds: expandSelectedDeck(selectedDeckId),
+        metaIntent: null,
+        currentPairId: state.currentPairId,
+        introducedIds: state.introducedIds,
+        mastery: state.mastery,
+        userFreeFormTranscript: trimmed,
+      });
+      if (out.userAugmented) setUserFreeFormPhrase(out.userAugmented);
+      // Single combined utterance: AI's response + follow-up question in one
+      // piece. No separate scripted Q to play afterward — pure ping-pong.
+      if (out.aiUtterance) {
+        const url = await prefetchTts(out.aiUtterance.hanzi);
+        dispatch({
+          type: "AI_SPOKE",
+          utterance: out.aiUtterance,
+          expectedResponse: out.expectedUserResponse,
+          pairId: out.pairId,
+          isNewPhrase: out.isNewPhrase,
         });
-        if (out.userAugmented) setUserFreeFormPhrase(out.userAugmented);
-        // Single combined utterance: AI's response + follow-up question in one
-        // piece. No separate scripted Q to play afterward — pure ping-pong.
-        if (out.aiUtterance) {
-          const url = await prefetchTts(out.aiUtterance.hanzi);
-          dispatch({
-            type: "AI_SPOKE",
-            utterance: out.aiUtterance,
-            expectedResponse: out.expectedUserResponse,
-            pairId: out.pairId,
-            isNewPhrase: out.isNewPhrase,
-          });
-          if (url) await playAudio(url);
-        }
-      } finally { setBusy(false); }
-      return;
-    }
-
-    // Pure free-form is the only path now. The scripted-scoring + tutor flow
-    // was removed alongside Azure pronunciation assessment. If we ever didn't
-    // hit the free-form branch above, just return silently.
+        if (url) await playAudio(url);
+      }
+    } finally { setBusy(false); }
   }
 
   return (
@@ -256,19 +243,7 @@ export default function Page() {
             </div>
           )}
 
-          {liveTranscript && (
-            <div className="rounded-2xl bg-terracotta/5 ring-1 ring-terracotta/20 p-6 text-center">
-              <div className="text-[10px] uppercase tracking-widest text-terracotta mb-1">you&apos;re saying</div>
-              <div className="font-serif text-3xl leading-tight">{liveTranscript}</div>
-              {!hideTranslations && (
-                <div className="mt-2 text-base text-ink-soft">
-                  <TonedPinyin text={toPinyin(liveTranscript, { toneType: "symbol", type: "string" })} />
-                </div>
-              )}
-            </div>
-          )}
-
-          <MicButton onAudio={userSpoke} onLiveTranscript={setLiveTranscript} />
+          <MicButton onAudio={userSpoke} />
         </div>
 
         <IntroducedList

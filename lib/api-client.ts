@@ -1,9 +1,9 @@
 "use client";
 import type { Score, Turn, Mastery } from "@/lib/conversation/state";
 import type { OrchestratorOutput } from "@/lib/conversation/orchestrator";
-// Score is still imported for the fetchTurn input type (lastUserScore) — kept
-// in the type system in case scoring comes back. The postScore/postTranscribe
-// helpers are gone; transcription is browser-side via Web Speech API.
+// Score type is still imported for fetchTurn's lastUserScore arg — kept in the
+// type system so scoring can come back later without a refactor. postScore
+// helper is intentionally not restored (no scoring path is wired up).
 
 export async function fetchTurn(args: {
   history: Turn[];
@@ -22,6 +22,14 @@ export async function fetchTurn(args: {
     body: JSON.stringify(args),
   });
   if (!res.ok) throw new Error(`/api/turn ${res.status}`);
+  return res.json();
+}
+
+export async function postTranscribe(audio: Blob): Promise<{ transcript: string }> {
+  const form = new FormData();
+  form.append("audio", audio, "speech.webm");
+  const res = await fetch("/api/transcribe", { method: "POST", body: form });
+  if (!res.ok) throw new Error(`/api/transcribe ${res.status}`);
   return res.json();
 }
 
