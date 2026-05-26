@@ -4,7 +4,6 @@ import type { Phrase } from "@/lib/decks/schema";
 import { loadAllDecks } from "@/lib/decks/loader";
 import { pickPhraseProgressive } from "@/lib/decks/selector";
 import { getAnthropic, CLAUDE_MODEL } from "@/lib/providers/anthropic";
-import { SYSTEM_PROMPT, parseClaudeJson, type ClaudeDecision } from "./claude-prompt";
 
 export type OrchestratorInput = {
   history: Turn[];
@@ -142,72 +141,85 @@ async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorO
   };
 }
 
+/** Call Claude for ONLY the conversational reply to a free-form user utterance.
+ * The orchestrator handles deck selection separately. */
+async function generateFreeFormReply(
+  userTranscript: string,
+  recentHistory: Turn[]
+): Promise<Phrase | undefined> {
+  try {
+    const client = getAnthropic();
+    const resp = await client.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 250,
+      system: `You are a friendly Mandarin tutor. The user just said something in Mandarin (transcript provided). Respond naturally in Mandarin in ONE short sentence — like a friend, not a lecturer. After your reply, the system will pivot to a scripted practice phrase, so DO NOT include practice phrases in your response.\n\nOutput ONLY a JSON object: {"hanzi": "...", "pinyin": "...", "english": "..."}`,
+      messages: [{
+        role: "user",
+        content: JSON.stringify({ userSaid: userTranscript, recentHistory: recentHistory.slice(-6) }),
+      }],
+    });
+    const textBlock = resp.content.find((b) => b.type === "text") as { type: "text"; text: string } | undefined;
+    const cleaned = (textBlock?.text ?? "").replace(/```json\s*/g, "").replace(/```\s*$/g, "").trim();
+    const parsed = JSON.parse(cleaned) as Phrase;
+    if (parsed.hanzi && parsed.pinyin && parsed.english) return parsed;
+  } catch {
+    // fall through to default
+  }
+  return { hanzi: "好。", pinyin: "hǎo.", english: "OK." };
+}
+
+const FULL_PASS_THRESHOLD = 80;
+const FULL_PASS_COMPLETENESS = 50;
+
 export async function runOrchestrator(input: OrchestratorInput): Promise<OrchestratorOutput> {
   const useMock = input.mock || !process.env.ANTHROPIC_API_KEY;
   if (useMock) return mockOrchestrator(input);
 
-  const decks = await loadAllDecks(path.join(process.cwd(), "decks"));
-  const filtered = input.activeDeckIds.length > 0
-    ? decks.filter((d) => input.activeDeckIds.includes(d.deck.id))
-    : decks;
-  const availablePhrases = filtered.flatMap((d) => d.pairs).slice(0, 40);
-
-  const client = getAnthropic();
-  const userMsg = JSON.stringify({
-    history: input.history.slice(-12),
-    lastUserScore: input.lastUserScore,
-    availablePhrases,
-    metaIntent: input.metaIntent,
-    userFreeFormTranscript: input.userFreeFormTranscript,
-  });
-
-  const resp = await client.messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: 600,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: userMsg }],
-  });
-
-  const textBlock = resp.content.find((b) => b.type === "text") as
-    | { type: "text"; text: string }
-    | undefined;
-  const text = textBlock?.text ?? "";
-  const decision: ClaudeDecision = parseClaudeJson(text);
-
-  if (decision.decision === "tutor" && decision.tutor) {
-    return {
-      speakerNext: "user",
-      routeTo: "tutor",
-      tutorPayload: {
-        targetWord: decision.tutor.targetWord,
-        diagnosis: decision.tutor.diagnosis,
-        referenceAudioUrl: "/mocks/silence.mp3",
-        retryPrompt: decision.tutor.retryPrompt,
-      },
-    };
+  // PASS branch — user just answered a scripted phrase correctly and hasn't yet
+  // spoken free-form. Hand the floor to the user. No Claude call needed.
+  if (input.lastUserScore && !input.userFreeFormTranscript && !input.isRetry) {
+    const s = input.lastUserScore;
+    const passed = s.accuracy >= FULL_PASS_THRESHOLD && s.tonesOk && s.completeness >= FULL_PASS_COMPLETENESS;
+    if (passed) {
+      return { speakerNext: "user", routeTo: "conversation" };
+    }
   }
 
-  if (decision.decision === "retry_full") {
-    return {
-      speakerNext: "user",
-      routeTo: "retry-full",
-      retryHint: decision.retryHint ?? "Try the whole phrase again.",
-    };
+  // FAIL branch — score below threshold or completeness low. Use the heuristic
+  // routing from the mock orchestrator (worst-word for tutor, retry-full for
+  // low completeness). Claude diagnosis can layer on top later.
+  if (input.lastUserScore) {
+    const fallback = await mockOrchestrator(input);
+    if (fallback.routeTo === "tutor" || fallback.routeTo === "retry-full") {
+      return fallback;
+    }
   }
 
-  if (decision.decision === "ai_speak" && decision.aiUtterance) {
-    return {
-      speakerNext: "ai",
-      routeTo: "conversation",
-      aiResponse: decision.aiResponse,
-      aiUtterance: { ...decision.aiUtterance, audioUrl: "/mocks/silence.mp3" },
-      expectedUserResponse: decision.expectedUserResponse,
-    };
-  }
+  // SCRIPTED CONTENT — initial turn OR following a free-form user turn.
+  // The deck-driven selector picks the next pair (mastery-aware). Claude only
+  // composes the conversational reply text when the user spoke free-form.
+  const { pair, isNew, aiSays, userSays } = await pickNextScripted(input);
+
+  const aiResponse = input.userFreeFormTranscript
+    ? await generateFreeFormReply(input.userFreeFormTranscript, input.history)
+    : undefined;
 
   return {
-    speakerNext: "user",
+    speakerNext: "ai",
     routeTo: "conversation",
-    expectedUserResponse: decision.expectedUserResponse,
+    pairId: pair.id,
+    isNewPhrase: isNew,
+    aiResponse,
+    aiUtterance: {
+      hanzi: aiSays.hanzi,
+      pinyin: aiSays.pinyin,
+      english: aiSays.english,
+      audioUrl: "/mocks/silence.mp3",
+    },
+    expectedUserResponse: {
+      hanzi: userSays.hanzi,
+      pinyin: userSays.pinyin,
+      english: userSays.english,
+    },
   };
 }
