@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useReducer, useRef, useState } from "react";
+import { pinyin as toPinyin } from "pinyin-pro";
 import { PhraseCard } from "@/components/PhraseCard";
 import { TonedPinyin } from "@/components/TonedPinyin";
 import { MicButton } from "@/components/MicButton";
@@ -440,6 +441,11 @@ export default function Page() {
             <div className="rounded-2xl bg-terracotta/5 ring-1 ring-terracotta/20 p-6 text-center">
               <div className="text-[10px] uppercase tracking-widest text-terracotta mb-1">you&apos;re saying</div>
               <div className="font-serif text-3xl leading-tight">{liveTranscript}</div>
+              {!hideTranslations && (
+                <div className="mt-2 text-base text-ink-soft">
+                  <TonedPinyin text={toPinyin(liveTranscript, { toneType: "symbol", type: "string" })} />
+                </div>
+              )}
             </div>
           )}
 
