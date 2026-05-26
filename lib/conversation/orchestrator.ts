@@ -142,39 +142,48 @@ async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorO
   };
 }
 
-/** Call Claude for ONLY the conversational reply to a free-form user utterance.
- * The orchestrator handles deck selection separately. We pass the NEXT scripted
- * question so Claude can compose a segue that mentions the topic naturally,
- * making the transition into the scripted Q feel less abrupt. */
-async function generateFreeFormReply(
-  userTranscript: string,
-  recentHistory: Turn[],
-  nextScriptedQ: Phrase | null
-): Promise<Phrase | undefined> {
+type FreeFormContext = {
+  userTranscript: string;
+  recentHistory: Turn[];
+  /** The next scripted question the tutor will deliver after this reply. */
+  nextScriptedQ: Phrase | null;
+  /** The expected user answer to that scripted Q. Lets Claude tell if the
+   * scenario has changed even when the question looks the same. */
+  nextExpectedResponse: Phrase | null;
+  /** The most recent scripted Q the user already answered (if any). */
+  prevScriptedQ: Phrase | null;
+  /** What the user actually said in their last scripted answer. */
+  prevUserAnswer: string | null;
+};
+
+async function generateFreeFormReply(ctx: FreeFormContext): Promise<Phrase | undefined> {
   try {
     const client = getAnthropic();
     const resp = await client.messages.create({
       model: CLAUDE_MODEL,
-      max_tokens: 300,
-      system: `You are a friendly Mandarin tutor responding to a user's free-form question or statement in Mandarin.
+      max_tokens: 350,
+      system: `You are a friendly Mandarin tutor responding to a user's free-form question or statement in Mandarin. After your reply, the system plays a scripted practice question (nextScriptedQ) which the user should answer with nextExpectedResponse.
 
 Rules:
 1. Respond in ONE OR TWO short Mandarin sentences — like a friend, not a lecturer.
-2. Your response MUST be a statement. Do NOT ask the user any question. After your reply the system plays a scripted practice question, so if you ask one too the user hears two questions stacked.
-3. Do NOT include or paraphrase the scripted question itself — you'll see it in nextScriptedQ but it's NOT your job to deliver it.
-4. When nextScriptedQ is provided, end your reply with ONE short statement that gently segues toward the TOPIC of the scripted Q (without asking it). This makes the pivot feel natural. Examples:
-   - user: "你好吗?" + nextScriptedQ: "你是美国人吗?" → reply: "我很好，谢谢。我还没去过美国。" (good + segue about America)
-   - user: "你叫什么名字?" + nextScriptedQ: "你想吃什么?" → reply: "我叫小明。我现在有点饿。" (name + segue about being hungry)
-   - user: "今天天气怎么样?" + nextScriptedQ: "你想喝咖啡吗?" → reply: "今天天气很好。这种天气我喜欢喝点东西。" (weather + segue about drinks)
-5. If nextScriptedQ isn't provided, just give the one-sentence answer.
+2. Your response MUST be a statement. Do NOT ask the user any question — the scripted Q comes next.
+3. Do NOT include or paraphrase the scripted Q itself.
+4. SEGUE NATURALLY toward the next scripted Q's topic:
+   - Normal case (new topic): end with one short statement mentioning the topic. e.g. user: "你好吗?" + nextScriptedQ: "你是美国人吗?" → "我很好，谢谢。我还没去过美国。"
+   - SAME-QUESTION-DIFFERENT-ANSWER case: if nextScriptedQ closely resembles prevScriptedQ but nextExpectedResponse differs from prevUserAnswer (Pimsleur teaches multiple variant answers), frame the segue as a scenario shift so the user knows to give a different answer. e.g. prev: "你会说英文吗?" / user said "我会说一点儿" / next: "你会说英文吗?" / expected: "我不会说英文" → "好。现在想象另一种情况，别人完全不会英文。" (OK. Now imagine a different scenario — someone who doesn't speak English at all.)
+   - For variations (greeting changes, polite vs. casual), say something like "好的。我换一种问法。" (Good. Let me ask in a different way.)
+5. Don't pile on context; keep total reply to two short sentences max.
 
 Output ONLY a JSON object: {"hanzi": "...", "pinyin": "...", "english": "..."}`,
       messages: [{
         role: "user",
         content: JSON.stringify({
-          userSaid: userTranscript,
-          recentHistory: recentHistory.slice(-6),
-          nextScriptedQ,
+          userSaid: ctx.userTranscript,
+          recentHistory: ctx.recentHistory.slice(-6),
+          prevScriptedQ: ctx.prevScriptedQ,
+          prevUserAnswer: ctx.prevUserAnswer,
+          nextScriptedQ: ctx.nextScriptedQ,
+          nextExpectedResponse: ctx.nextExpectedResponse,
         }),
       }],
     });
@@ -220,12 +229,23 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
   // composes the conversational reply text when the user spoke free-form.
   const { pair, isNew, aiSays, userSays } = await pickNextScripted(input);
 
+  // Hunt back through history for the most recent scripted AI Q + user scripted answer
+  // so Claude can detect "same question, different expected answer" cases.
+  const reversed = [...input.history].reverse();
+  const prevAiTurn = reversed.find((t) => t.speaker === "ai");
+  const prevUserTurn = reversed.find((t) => t.speaker === "user");
+  const prevScriptedQ = prevAiTurn?.speaker === "ai" ? prevAiTurn.phrase : null;
+  const prevUserAnswer = prevUserTurn?.speaker === "user" ? prevUserTurn.text : null;
+
   const aiResponse = input.userFreeFormTranscript
-    ? await generateFreeFormReply(
-        input.userFreeFormTranscript,
-        input.history,
-        { hanzi: aiSays.hanzi, pinyin: aiSays.pinyin, english: aiSays.english }
-      )
+    ? await generateFreeFormReply({
+        userTranscript: input.userFreeFormTranscript,
+        recentHistory: input.history,
+        nextScriptedQ: { hanzi: aiSays.hanzi, pinyin: aiSays.pinyin, english: aiSays.english },
+        nextExpectedResponse: { hanzi: userSays.hanzi, pinyin: userSays.pinyin, english: userSays.english },
+        prevScriptedQ,
+        prevUserAnswer,
+      })
     : undefined;
 
   return {
