@@ -159,7 +159,11 @@ export function applyEvent(s: State, e: Event): State {
     }
 
     case "AI_CONFIRMED":
-      return { ...s, mode: "awaiting-user-question", nextSpeaker: "user", pendingPhrase: undefined, expectedResponse: undefined, currentPairId: undefined };
+      // Keep pendingPhrase so the PhraseCard stays visible during free-form mode
+      // (it shows the AI's last scripted line in "they said"; the "your line"
+      // section morphs to the "ask a question" prompt via the isFreeForm flag).
+      // expectedResponse + currentPairId clear since the scripted exchange is done.
+      return { ...s, mode: "awaiting-user-question", nextSpeaker: "user", expectedResponse: undefined, currentPairId: undefined };
 
     case "USER_FREEFORM": {
       const turn: Turn = { speaker: "user-freeform", text: e.transcript, at: Date.now() };

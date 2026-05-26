@@ -65,8 +65,14 @@ export default function Page() {
   }, [hideTranslations]);
 
   async function playAudio(url: string) {
-    const audio = new Audio(url);
-    await audio.play();
+    return new Promise<void>((resolve) => {
+      const audio = new Audio(url);
+      // Resolve only when playback finishes — audio.play() alone resolves on
+      // start, which would let the next audio overlap this one.
+      audio.onended = () => resolve();
+      audio.onerror = () => resolve();
+      audio.play().catch(() => resolve());
+    });
   }
 
   async function aiTurn(metaIntent: string | null = null) {
