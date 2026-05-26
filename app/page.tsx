@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { PhraseCard } from "@/components/PhraseCard";
+import { TonedPinyin } from "@/components/TonedPinyin";
 import { MicButton } from "@/components/MicButton";
 import { type TutorPayload } from "@/components/TutorPanel";
 import { IntroducedList } from "@/components/IntroducedList";
@@ -369,13 +370,12 @@ export default function Page() {
           )}
 
           {userFreeFormPhrase && (
-            <div className="rounded-md bg-ink-soft/5 px-5 py-3 text-center">
-              <div className="text-[10px] uppercase tracking-widest text-ink-soft mb-1">you said</div>
-              <div className="font-serif text-2xl leading-tight">{userFreeFormPhrase.hanzi}</div>
+            <div className="rounded-2xl bg-card p-10 shadow-sm text-center ring-1 ring-ink-soft/10">
+              <div className="font-serif text-6xl leading-tight tracking-wide">{userFreeFormPhrase.hanzi}</div>
               {!hideTranslations && (
                 <>
-                  <div className="mt-1 text-sm text-ink-soft">{userFreeFormPhrase.pinyin}</div>
-                  <div className="text-xs text-ink-soft/80">{userFreeFormPhrase.english}</div>
+                  <div className="mt-3 text-xl"><TonedPinyin text={userFreeFormPhrase.pinyin} /></div>
+                  <div className="mt-1 text-ink-soft">{userFreeFormPhrase.english}</div>
                 </>
               )}
             </div>
