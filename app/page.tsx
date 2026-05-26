@@ -4,6 +4,7 @@ import { PhraseCard } from "@/components/PhraseCard";
 import { MicButton } from "@/components/MicButton";
 import { type TutorPayload } from "@/components/TutorPanel";
 import { IntroducedList } from "@/components/IntroducedList";
+import { PitchComparison } from "@/components/PitchComparison";
 import { applyEvent, initialState, tierFromAvgAccuracy, avgWordAccuracy, type Score } from "@/lib/conversation/state";
 import { saveState, loadState, clearState } from "@/lib/conversation/persistence";
 import { fetchTurn, postScore, postTts, postTranscribe } from "@/lib/api-client";
@@ -18,6 +19,8 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [tutor, setTutor] = useState<TutorPayload | null>(null);
   const [tutorRetries, setTutorRetries] = useState(0);
+  const [tutorRefUrl, setTutorRefUrl] = useState<string | null>(null);
+  const [lastUserBlob, setLastUserBlob] = useState<Blob | null>(null);
   const [lastScore, setLastScore] = useState<Score | null>(null);
   const [tutorAttempt, setTutorAttempt] = useState<Score | null>(null);
   const [retryHint, setRetryHint] = useState<string | null>(null);
@@ -173,6 +176,7 @@ export default function Page() {
       ? tutor!.retryPrompt
       : state.expectedResponse?.hanzi ?? state.pendingPhrase?.hanzi ?? "";
     setRetryHint(null); // clear any prior "didn't catch that" while we score the new attempt
+    setLastUserBlob(blob); // keep the raw audio for pitch comparison
     setBusy(true);
     try {
       const score = await postScore(blob, ref);
@@ -236,10 +240,18 @@ export default function Page() {
         setTutor(out.tutorPayload);
         // Auto-play the target character so the user hears what to repeat.
         // Each consecutive retry on the same char slows down further (0.85, 0.7, 0.6 ...).
-        const rate = Math.max(0.55, 1.0 - nextRetries * 0.15);
+        // Always fetch at NORMAL speed for the pitch-comparison reference so the
+        // tone shape is the canonical one (not stretched by SSML rate).
+        const playRate = Math.max(0.55, 1.0 - nextRetries * 0.15);
         try {
-          const url = await postTts(out.tutorPayload.targetWord, nextRetries === 0 ? undefined : rate);
-          await playAudio(url);
+          // Pitch reference: always normal speed, cached per target word.
+          if (!isSameTarget || !tutorRefUrl) {
+            const refUrl = await postTts(out.tutorPayload.targetWord);
+            setTutorRefUrl(refUrl);
+          }
+          // Playback may be slowed down.
+          const playUrl = nextRetries === 0 ? (tutorRefUrl ?? await postTts(out.tutorPayload.targetWord)) : await postTts(out.tutorPayload.targetWord, playRate);
+          await playAudio(playUrl);
         } catch { /* swallow; user can still try */ }
         return;
       }
@@ -257,6 +269,8 @@ export default function Page() {
       setTutorAttempt(null);
       setTutor(null);
       setTutorRetries(0);
+      setTutorRefUrl(null);
+      setLastUserBlob(null);
       setRetryHint(null);
       dispatch({ type: "AI_CONFIRMED" });
       if (out.aiUtterance) {
@@ -384,6 +398,10 @@ export default function Page() {
                 </button>
               </div>
             </div>
+          )}
+
+          {tutor && (
+            <PitchComparison userBlob={lastUserBlob} referenceUrl={tutorRefUrl} />
           )}
 
           {!tutor && retryHint && (
