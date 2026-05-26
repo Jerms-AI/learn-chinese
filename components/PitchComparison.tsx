@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { extractPitchContour, extractPitchContourFromUrl, type PitchSample } from "@/lib/audio/pitch";
 
 const WIDTH = 280;
-const HEIGHT = 70;
+const HEIGHT = 110;
 const MIN_HZ = 70;
 const MAX_HZ = 400;
 
@@ -39,26 +39,57 @@ function PitchTrack({
   label: string;
   loading: boolean;
 }) {
+  const voicedCount = samples?.filter((s) => s.hz > 0).length ?? 0;
+  const dotData = samples ? voicedDotPositions(samples) : [];
   return (
     <div>
       <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-ink-soft mb-1">
         <span>{label}</span>
-        {loading && <span className="italic normal-case tracking-normal">computing…</span>}
+        <span className="italic normal-case tracking-normal">
+          {loading ? "computing…" : samples ? `${voicedCount} samples` : ""}
+        </span>
       </div>
       <div className="rounded-md bg-parchment/50 border border-ink-soft/10" style={{ width: WIDTH, height: HEIGHT }}>
-        {samples && samples.length > 0 && (
+        {samples && (
           <svg width={WIDTH} height={HEIGHT} className="block">
-            {/* Faint reference grid lines at musical-ish bands. */}
-            {[100, 200, 300].map((hz) => {
+            {[100, 150, 200, 250, 300].map((hz) => {
               const y = HEIGHT - ((hz - MIN_HZ) / (MAX_HZ - MIN_HZ)) * HEIGHT;
-              return <line key={hz} x1={0} x2={WIDTH} y1={y} y2={y} stroke="rgba(0,0,0,0.06)" />;
+              return (
+                <g key={hz}>
+                  <line x1={0} x2={WIDTH} y1={y} y2={y} stroke="rgba(0,0,0,0.05)" />
+                  <text x={2} y={y - 2} fontSize="8" fill="rgba(0,0,0,0.3)">{hz}</text>
+                </g>
+              );
             })}
             <path d={pitchToPath(samples)} stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            {/* Render each voiced sample as a small dot so isolated points stay visible. */}
+            {dotData.map((d, i) => (
+              <circle key={i} cx={d.x} cy={d.y} r={1.4} fill={color} />
+            ))}
+            {voicedCount === 0 && (
+              <text x={WIDTH / 2} y={HEIGHT / 2} fontSize="10" fill="rgba(0,0,0,0.4)" textAnchor="middle">
+                no pitch detected
+              </text>
+            )}
           </svg>
         )}
       </div>
     </div>
   );
+}
+
+function voicedDotPositions(samples: PitchSample[]): Array<{ x: number; y: number }> {
+  const lastT = samples[samples.length - 1]?.tMs || 1;
+  const out: Array<{ x: number; y: number }> = [];
+  for (const s of samples) {
+    if (s.hz === 0) continue;
+    const clamped = Math.max(MIN_HZ, Math.min(MAX_HZ, s.hz));
+    out.push({
+      x: (s.tMs / lastT) * WIDTH,
+      y: HEIGHT - ((clamped - MIN_HZ) / (MAX_HZ - MIN_HZ)) * HEIGHT,
+    });
+  }
+  return out;
 }
 
 export function PitchComparison({

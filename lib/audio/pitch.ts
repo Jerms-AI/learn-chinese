@@ -31,22 +31,33 @@ export async function extractPitchContour(
   blob: Blob,
   opts: { stepMs?: number; windowSize?: number; clarityThreshold?: number } = {}
 ): Promise<PitchSample[]> {
-  const stepMs = opts.stepMs ?? 15;
-  const windowSize = opts.windowSize ?? 2048;
-  const clarityThreshold = opts.clarityThreshold ?? 0.85;
+  const stepMs = opts.stepMs ?? 10;
+  const windowSize = opts.windowSize ?? 1024;
+  const clarityThreshold = opts.clarityThreshold ?? 0.55;
 
   const { samples, sampleRate } = await decodeToMono(blob);
   const stepSamples = Math.max(1, Math.floor((stepMs / 1000) * sampleRate));
   const detector = PitchDetector.forFloat32Array(windowSize);
-  detector.minVolumeDecibels = -45; // ignore near-silence
+  detector.minVolumeDecibels = -60; // accept quieter mic input
 
-  const out: PitchSample[] = [];
+  const raw: PitchSample[] = [];
   for (let i = 0; i + windowSize < samples.length; i += stepSamples) {
     const window = samples.slice(i, i + windowSize);
     const [hz, clarity] = detector.findPitch(window, sampleRate);
     const tMs = Math.round((i / sampleRate) * 1000);
-    out.push({ tMs, hz: clarity >= clarityThreshold && hz > 50 && hz < 600 ? hz : 0 });
+    raw.push({ tMs, hz: clarity >= clarityThreshold && hz > 60 && hz < 600 ? hz : 0 });
   }
+
+  // Light smoothing: 3-sample median filter on voiced points to denoise jitter.
+  // Unvoiced (hz=0) samples are preserved so we can still break the line.
+  const out: PitchSample[] = raw.map((s, i) => {
+    if (s.hz === 0) return s;
+    const a = raw[i - 1]?.hz ?? 0;
+    const b = raw[i + 1]?.hz ?? 0;
+    const trio = [a, s.hz, b].filter((v) => v > 0).sort((x, y) => x - y);
+    return { tMs: s.tMs, hz: trio[Math.floor(trio.length / 2)] };
+  });
+
   return out;
 }
 
