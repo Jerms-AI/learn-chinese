@@ -143,31 +143,39 @@ async function mockOrchestrator(input: OrchestratorInput): Promise<OrchestratorO
 }
 
 /** Call Claude for ONLY the conversational reply to a free-form user utterance.
- * The orchestrator handles deck selection separately. */
+ * The orchestrator handles deck selection separately. We pass the NEXT scripted
+ * question so Claude can compose a segue that mentions the topic naturally,
+ * making the transition into the scripted Q feel less abrupt. */
 async function generateFreeFormReply(
   userTranscript: string,
-  recentHistory: Turn[]
+  recentHistory: Turn[],
+  nextScriptedQ: Phrase | null
 ): Promise<Phrase | undefined> {
   try {
     const client = getAnthropic();
     const resp = await client.messages.create({
       model: CLAUDE_MODEL,
-      max_tokens: 250,
+      max_tokens: 300,
       system: `You are a friendly Mandarin tutor responding to a user's free-form question or statement in Mandarin.
 
 Rules:
-1. Respond in ONE short Mandarin sentence — like a friend, not a lecturer.
-2. Your response MUST be a statement/acknowledgement. Do NOT ask the user any question back. The system pivots to a scripted practice question immediately after your reply, so if you ask one too, the user hears two questions stacked.
-3. Do NOT include or paraphrase any practice/textbook phrases. Just answer naturally.
-4. Examples:
-   - user: "你好吗?" → response: "我很好，谢谢。" (NOT "你呢?")
-   - user: "你叫什么名字?" → response: "我叫小明。" (NOT "你呢?")
-   - user: "今天天气怎么样?" → response: "今天天气很好。"
+1. Respond in ONE OR TWO short Mandarin sentences — like a friend, not a lecturer.
+2. Your response MUST be a statement. Do NOT ask the user any question. After your reply the system plays a scripted practice question, so if you ask one too the user hears two questions stacked.
+3. Do NOT include or paraphrase the scripted question itself — you'll see it in nextScriptedQ but it's NOT your job to deliver it.
+4. When nextScriptedQ is provided, end your reply with ONE short statement that gently segues toward the TOPIC of the scripted Q (without asking it). This makes the pivot feel natural. Examples:
+   - user: "你好吗?" + nextScriptedQ: "你是美国人吗?" → reply: "我很好，谢谢。我还没去过美国。" (good + segue about America)
+   - user: "你叫什么名字?" + nextScriptedQ: "你想吃什么?" → reply: "我叫小明。我现在有点饿。" (name + segue about being hungry)
+   - user: "今天天气怎么样?" + nextScriptedQ: "你想喝咖啡吗?" → reply: "今天天气很好。这种天气我喜欢喝点东西。" (weather + segue about drinks)
+5. If nextScriptedQ isn't provided, just give the one-sentence answer.
 
 Output ONLY a JSON object: {"hanzi": "...", "pinyin": "...", "english": "..."}`,
       messages: [{
         role: "user",
-        content: JSON.stringify({ userSaid: userTranscript, recentHistory: recentHistory.slice(-6) }),
+        content: JSON.stringify({
+          userSaid: userTranscript,
+          recentHistory: recentHistory.slice(-6),
+          nextScriptedQ,
+        }),
       }],
     });
     const textBlock = resp.content.find((b) => b.type === "text") as { type: "text"; text: string } | undefined;
@@ -213,7 +221,11 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
   const { pair, isNew, aiSays, userSays } = await pickNextScripted(input);
 
   const aiResponse = input.userFreeFormTranscript
-    ? await generateFreeFormReply(input.userFreeFormTranscript, input.history)
+    ? await generateFreeFormReply(
+        input.userFreeFormTranscript,
+        input.history,
+        { hanzi: aiSays.hanzi, pinyin: aiSays.pinyin, english: aiSays.english }
+      )
     : undefined;
 
   return {
