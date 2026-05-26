@@ -183,17 +183,21 @@ export default function Page() {
         words: score.words,
       };
 
-      // RECOGNITION OVERRIDE for tutor drills: if Azure transcribed the target
-      // character, count it as a pass even when the pronunciation score is low.
-      // Azure's Mandarin speech-to-text is much more reliable than its
-      // pronunciation assessment on single-char drills, where tone scoring can
-      // hand back wildly inconsistent numbers on the same audio.
-      if (inTutor && tutor) {
-        const norm = (s: string) => s.replace(/[\s。，！？.,!?]/g, "");
-        const target = norm(tutor.retryPrompt);
-        const heard = norm(score.transcript);
-        if (target && heard.includes(target)) {
-          scoreShape.accuracy = Math.max(scoreShape.accuracy, 70); // ≥ retry pass threshold (65)
+      // RECOGNITION OVERRIDE: trust Azure's speech-to-text over its pronunciation
+      // assessment. Per-word accuracy scoring is wildly inconsistent on Mandarin
+      // (same audio can score 25 or 98 across re-runs), but the transcript is
+      // reliable. If Azure heard the expected text, count as a pass — the user
+      // genuinely said the thing. Per-word dots stay raw for honest feedback.
+      const norm = (s: string) => s.replace(/[\s。，！？.,!?]/g, "");
+      const recognizedTarget = inTutor
+        ? (tutor ? norm(tutor.retryPrompt) : "")
+        : norm(state.expectedResponse?.hanzi ?? "");
+      const heard = norm(score.transcript);
+      const recognized = !!recognizedTarget && heard.includes(recognizedTarget);
+      if (recognized) {
+        if (inTutor) {
+          // Tutor retries also bump per-word so the small dot turns green-ish.
+          scoreShape.accuracy = Math.max(scoreShape.accuracy, 70);
           scoreShape.tonesOk = true;
           if (scoreShape.words.length > 0) {
             scoreShape.words = scoreShape.words.map((w) => ({
@@ -201,6 +205,12 @@ export default function Page() {
               accuracy: Math.max(w.accuracy, 70),
             }));
           }
+        } else {
+          // Full-sentence: bump overall + tonesOk so the orchestrator advances,
+          // but leave per-word accuracies untouched. The dots show real numbers
+          // (so you see WHICH chars Azure had trouble with) but you still pass.
+          scoreShape.accuracy = Math.max(scoreShape.accuracy, 80);
+          scoreShape.tonesOk = true;
         }
       }
 
@@ -211,8 +221,12 @@ export default function Page() {
 
       // For full-sentence attempts, compute tier from per-character average accuracy.
       // Tutor retries don't push into the rolling-tier window (tier = null).
+      // When recognized but raw accuracy would tier red, bump to orange so the
+      // user's mastery streak can still advance (the dot honestly logs that it
+      // was a marginal attempt, but progression isn't blocked).
       const avgChar = avgWordAccuracy(scoreShape);
-      const tier = inTutor ? null : tierFromAvgAccuracy(avgChar);
+      const rawTier = tierFromAvgAccuracy(avgChar);
+      const tier = inTutor ? null : (recognized && rawTier === "red" ? "orange" : rawTier);
       const passed = !inTutor && tier !== "red" && scoreShape.completeness >= 50;
       dispatch({
         type: "USER_UTTERANCE",
