@@ -13,6 +13,19 @@ function reducer(s: ReturnType<typeof initialState>, e: Parameters<typeof applyE
   return applyEvent(s, e);
 }
 
+/** Expand the user's deck selection into the cumulative pool. Picking Pimsleur 2
+ * means "the learner is at level 2, so include 1 + 2." Same idea for HSK levels. */
+function expandSelectedDeck(id: string): string[] {
+  if (id === "all") return [];
+  const pimsleur = ["pimsleur-l1", "pimsleur-l2", "pimsleur-l3", "pimsleur-l4", "pimsleur-l5"];
+  const pIdx = pimsleur.indexOf(id);
+  if (pIdx >= 0) return pimsleur.slice(0, pIdx + 1);
+  const hsk = ["hsk1", "hsk2"];
+  const hIdx = hsk.indexOf(id);
+  if (hIdx >= 0) return hsk.slice(0, hIdx + 1);
+  return [id];
+}
+
 export default function Page() {
   const [state, dispatch] = useReducer(reducer, initialState());
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -84,7 +97,7 @@ export default function Page() {
       const out = await fetchTurn({
         history: state.history,
         lastUserScore: null,
-        activeDeckIds: selectedDeckId === "all" ? [] : [selectedDeckId],
+        activeDeckIds: expandSelectedDeck(selectedDeckId),
         metaIntent,
         currentPairId: state.currentPairId,
         introducedIds: state.introducedIds,
@@ -131,7 +144,7 @@ export default function Page() {
         const out = await fetchTurn({
           history: state.history,
           lastUserScore: null,
-          activeDeckIds: selectedDeckId === "all" ? [] : [selectedDeckId],
+          activeDeckIds: expandSelectedDeck(selectedDeckId),
           metaIntent: null,
           currentPairId: state.currentPairId,
           introducedIds: state.introducedIds,
@@ -246,7 +259,7 @@ export default function Page() {
       const out = await fetchTurn({
         history: state.history,
         lastUserScore: scoreShape,
-        activeDeckIds: selectedDeckId === "all" ? [] : [selectedDeckId],
+        activeDeckIds: expandSelectedDeck(selectedDeckId),
         metaIntent: null,
         isRetry: inTutor,
         currentPairId: state.currentPairId,
