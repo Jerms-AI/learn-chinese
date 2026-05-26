@@ -74,9 +74,13 @@ export function pickPhraseProgressive(
     return { pair: allPairs[0], isNew: true };
   }
 
-  // All introduced pairs are mastered → introduce the next.
-  const allMastered = introduced.every((p) => isMastered(opts.mastery[p.id]));
-  if (allMastered) {
+  // Introduce a new phrase as soon as the MOST-RECENTLY-INTRODUCED pair is
+  // mastered. Older introduced phrases keep cycling in for review but don't
+  // block new content from coming in.
+  const newestId = opts.introducedIds[opts.introducedIds.length - 1];
+  const newestMastery = opts.mastery[newestId];
+  const newestPair = introduced.find((p) => p.id === newestId);
+  if (isMastered(newestMastery)) {
     const next = allPairs.find((p) => !introducedSet.has(p.id));
     if (next) return { pair: next, isNew: true };
     // Nothing new to introduce; fall through to weighted pick over introduced.
@@ -84,10 +88,7 @@ export function pickPhraseProgressive(
 
   // Focus-on-new bias: the most-recently-introduced pair gets a heavy preference
   // during its first few attempts (or until mastered).
-  const newestId = opts.introducedIds[opts.introducedIds.length - 1];
-  const newestMastery = opts.mastery[newestId];
   const newestAttempts = newestMastery?.attempts ?? 0;
-  const newestPair = introduced.find((p) => p.id === newestId);
   if (
     newestPair &&
     newestId !== opts.avoidId &&
@@ -110,7 +111,11 @@ export function pickPhraseProgressive(
     const sinceLastSeenMs = m?.lastSeenAt ? now - m.lastSeenAt : 60_000;
     const weaknessWeight = 1 - quality + 0.15;                           // weak phrases come back more
     const recencyWeight = 1 + Math.log(1 + sinceLastSeenMs / 60_000);
-    return { pair: p, weight: weaknessWeight * recencyWeight };
+    // Mastered phrases come back much less often — they're not pushed out of
+    // rotation entirely (long-stale ones do eventually resurface via recency),
+    // but they shouldn't dominate the pool the way newer/weaker phrases should.
+    const masteryDamper = isMastered(m) ? 0.25 : 1.0;
+    return { pair: p, weight: weaknessWeight * recencyWeight * masteryDamper };
   });
 
   const total = weighted.reduce((s, w) => s + w.weight, 0);
