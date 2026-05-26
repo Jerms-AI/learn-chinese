@@ -183,6 +183,27 @@ export default function Page() {
         words: score.words,
       };
 
+      // RECOGNITION OVERRIDE for tutor drills: if Azure transcribed the target
+      // character, count it as a pass even when the pronunciation score is low.
+      // Azure's Mandarin speech-to-text is much more reliable than its
+      // pronunciation assessment on single-char drills, where tone scoring can
+      // hand back wildly inconsistent numbers on the same audio.
+      if (inTutor && tutor) {
+        const norm = (s: string) => s.replace(/[\s。，！？.,!?]/g, "");
+        const target = norm(tutor.retryPrompt);
+        const heard = norm(score.transcript);
+        if (target && heard.includes(target)) {
+          scoreShape.accuracy = Math.max(scoreShape.accuracy, 70); // ≥ retry pass threshold (65)
+          scoreShape.tonesOk = true;
+          if (scoreShape.words.length > 0) {
+            scoreShape.words = scoreShape.words.map((w) => ({
+              ...w,
+              accuracy: Math.max(w.accuracy, 70),
+            }));
+          }
+        }
+      }
+
       // Only overwrite the full-sentence score chips on the PhraseCard when this
       // is a full-sentence attempt. Tutor retries shouldn't clobber that view.
       if (inTutor) setTutorAttempt(scoreShape);

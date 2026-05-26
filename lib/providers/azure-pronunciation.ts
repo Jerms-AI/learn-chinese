@@ -59,15 +59,12 @@ export async function scorePronunciation(
 
   const audioConfig = sdk.AudioConfig.fromStreamInput(pushStream);
   const recognizer = new sdk.SpeechRecognizer(speechConfig, audioConfig);
-  // Word granularity (not Phoneme) is far more forgiving for tones — Azure's
-  // Mandarin phoneme model penalizes harshly for tone drift, often inconsistent
-  // even on the same audio. Miscue detection OFF: it punishes single-char
-  // drills for any added breath/syllable. These two changes alone smooth out
-  // a lot of the "you said it correctly but got 25" weirdness.
+  // Phoneme granularity (Word was even worse). Miscue OFF still — it punishes
+  // single-char drills for any added breath as an "inserted word".
   const paConfig = new sdk.PronunciationAssessmentConfig(
     referenceText,
     sdk.PronunciationAssessmentGradingSystem.HundredMark,
-    sdk.PronunciationAssessmentGranularity.Word,
+    sdk.PronunciationAssessmentGranularity.Phoneme,
     false
   );
   paConfig.applyTo(recognizer);
