@@ -2,11 +2,11 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { PhraseCard } from "@/components/PhraseCard";
 import { MicButton } from "@/components/MicButton";
-import { TutorPanel, type TutorPayload } from "@/components/TutorPanel";
+import { type TutorPayload } from "@/components/TutorPanel";
 import { IntroducedList } from "@/components/IntroducedList";
 import { applyEvent, initialState, tierFromAvgAccuracy, avgWordAccuracy, type Score } from "@/lib/conversation/state";
 import { saveState, loadState, clearState } from "@/lib/conversation/persistence";
-import { fetchTurn, postScore, postTts } from "@/lib/api-client";
+import { fetchTurn, postScore, postTts, postTranscribe } from "@/lib/api-client";
 
 function reducer(s: ReturnType<typeof initialState>, e: Parameters<typeof applyEvent>[1]) {
   return applyEvent(s, e);
@@ -17,10 +17,12 @@ export default function Page() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tutor, setTutor] = useState<TutorPayload | null>(null);
+  const [tutorRetries, setTutorRetries] = useState(0);
   const [lastScore, setLastScore] = useState<Score | null>(null);
   const [tutorAttempt, setTutorAttempt] = useState<Score | null>(null);
   const [retryHint, setRetryHint] = useState<string | null>(null);
   const [hideTranslations, setHideTranslations] = useState(false);
+  const [userFreeFormPhrase, setUserFreeFormPhrase] = useState<{ hanzi: string; pinyin: string; english: string } | null>(null);
   const [decks, setDecks] = useState<Array<{ id: string; title: string; pairCount: number }>>([]);
   const [selectedDeckId, setSelectedDeckId] = useState<string>("all");
   const hydratedRef = useRef(false);
@@ -65,8 +67,14 @@ export default function Page() {
   }, [hideTranslations]);
 
   async function playAudio(url: string) {
-    const audio = new Audio(url);
-    await audio.play();
+    return new Promise<void>((resolve) => {
+      const audio = new Audio(url);
+      // Resolve only when playback finishes — audio.play() alone resolves on
+      // start, which would let the next audio overlap this one.
+      audio.onended = () => resolve();
+      audio.onerror = () => resolve();
+      audio.play().catch(() => resolve());
+    });
   }
 
   async function aiTurn(metaIntent: string | null = null) {
@@ -82,9 +90,7 @@ export default function Page() {
         mastery: state.mastery,
       });
       if (out.aiUtterance) {
-        const url = await postTts(out.aiUtterance.hanzi);
-        setAudioUrl(url);
-        await playAudio(url);
+        const url = await prefetchTts(out.aiUtterance.hanzi);
         dispatch({
           type: "AI_SPOKE",
           utterance: out.aiUtterance,
@@ -92,12 +98,74 @@ export default function Page() {
           pairId: out.pairId,
           isNewPhrase: out.isNewPhrase,
         });
+        await playAudio(url);
       }
     } finally { setBusy(false); }
   }
 
+  /** Pre-fetch the TTS audio URL so we can dispatch the UI update + start
+   * playback in the same tick (no silent gap while Azure synthesizes). */
+  async function prefetchTts(text: string): Promise<string> {
+    const url = await postTts(text);
+    setAudioUrl(url);
+    return url;
+  }
+
   async function userSpoke(blob: Blob) {
     const inTutor = !!tutor;
+    const inFreeForm = !inTutor && state.mode === "awaiting-user-question";
+
+    // FREE-FORM PATH: user is asking anything. Transcribe → ask orchestrator
+    // for a natural reply + the next scripted Q.
+    if (inFreeForm) {
+      setBusy(true);
+      try {
+        const { transcript } = await postTranscribe(blob);
+        if (!transcript || !transcript.trim()) {
+          // Azure heard nothing — keep the user in free-form mode and prompt retry.
+          setRetryHint("I didn't catch that. Hold space and try again.");
+          return;
+        }
+        dispatch({ type: "USER_FREEFORM", transcript });
+        const out = await fetchTurn({
+          history: state.history,
+          lastUserScore: null,
+          activeDeckIds: selectedDeckId === "all" ? [] : [selectedDeckId],
+          metaIntent: null,
+          currentPairId: state.currentPairId,
+          introducedIds: state.introducedIds,
+          mastery: state.mastery,
+          userFreeFormTranscript: transcript,
+        });
+        // Capture Claude's augmented version of what the user said (pinyin + english).
+        if (out.userAugmented) {
+          setUserFreeFormPhrase(out.userAugmented);
+        }
+        // Pre-fetch each utterance's TTS BEFORE dispatching the UI update, so
+        // text + audio land together (no silent gap while Azure synthesizes).
+        if (out.aiResponse) {
+          const url = await prefetchTts(out.aiResponse.hanzi);
+          dispatch({ type: "AI_RESPONDED_FREEFORM", utterance: out.aiResponse });
+          await playAudio(url);
+          await new Promise((r) => setTimeout(r, 1200));
+        }
+        if (out.aiUtterance) {
+          setLastScore(null);
+          setUserFreeFormPhrase(null); // clear once we transition to next scripted Q
+          const url = await prefetchTts(out.aiUtterance.hanzi);
+          dispatch({
+            type: "AI_SPOKE",
+            utterance: out.aiUtterance,
+            expectedResponse: out.expectedUserResponse,
+            pairId: out.pairId,
+            isNewPhrase: out.isNewPhrase,
+          });
+          await playAudio(url);
+        }
+      } finally { setBusy(false); }
+      return;
+    }
+
     // In tutor mode, the user is drilling a single character — score against THAT,
     // not the full sentence (otherwise the missing characters all score 0 and the
     // loop chases a different "worst word" each retry).
@@ -162,7 +230,17 @@ export default function Page() {
 
       if (out.routeTo === "tutor" && out.tutorPayload) {
         setRetryHint(null);
+        const isSameTarget = tutor?.targetWord === out.tutorPayload.targetWord;
+        const nextRetries = isSameTarget ? tutorRetries + 1 : 0;
+        setTutorRetries(nextRetries);
         setTutor(out.tutorPayload);
+        // Auto-play the target character so the user hears what to repeat.
+        // Each consecutive retry on the same char slows down further (0.85, 0.7, 0.6 ...).
+        const rate = Math.max(0.55, 1.0 - nextRetries * 0.15);
+        try {
+          const url = await postTts(out.tutorPayload.targetWord, nextRetries === 0 ? undefined : rate);
+          await playAudio(url);
+        } catch { /* swallow; user can still try */ }
         return;
       }
 
@@ -178,13 +256,12 @@ export default function Page() {
 
       setTutorAttempt(null);
       setTutor(null);
+      setTutorRetries(0);
       setRetryHint(null);
       dispatch({ type: "AI_CONFIRMED" });
       if (out.aiUtterance) {
         setLastScore(null); // clear old score before next prompt
-        const url = await postTts(out.aiUtterance.hanzi);
-        setAudioUrl(url);
-        await playAudio(url);
+        const url = await prefetchTts(out.aiUtterance.hanzi);
         dispatch({
           type: "AI_SPOKE",
           utterance: out.aiUtterance,
@@ -192,6 +269,7 @@ export default function Page() {
           pairId: out.pairId,
           isNewPhrase: out.isNewPhrase,
         });
+        await playAudio(url);
       }
     } finally { setBusy(false); }
   }
@@ -257,14 +335,17 @@ export default function Page() {
           {state.pendingPhrase && (() => {
             const currentTiers = state.currentPairId ? state.mastery[state.currentPairId]?.lastTiers ?? [] : [];
             const latest = currentTiers[currentTiers.length - 1] ?? null;
+            const isFreeForm = state.mode === "awaiting-user-question";
             return (
               <PhraseCard
                 phrase={state.pendingPhrase}
                 expectedResponse={state.expectedResponse}
-                lastScore={lastScore}
+                lastScore={isFreeForm ? null : lastScore}
                 isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
                 latestTier={latest}
                 hideTranslations={hideTranslations}
+                isFreeForm={isFreeForm}
+                userJustAsked={userFreeFormPhrase}
                 onToggleTranslations={() => setHideTranslations((v) => !v)}
                 onReplay={() => audioUrl && playAudio(audioUrl)}
               />
@@ -272,20 +353,37 @@ export default function Page() {
           })()}
 
           {tutor && (
-            <TutorPanel
-              key={tutor.targetWord}
-              payload={tutor}
-              attemptScore={tutorAttempt}
-              passThreshold={65}
-              onRetry={userSpoke}
-              onSkip={() => { setTutor(null); setTutorAttempt(null); dispatch({ type: "TUTOR_RESOLVED" }); }}
-            />
-          )}
-
-          {!tutor && state.mode === "awaiting-user-question" && (
-            <p className="text-center text-sm text-ink-soft">
-              Your turn — ask me something in Mandarin.
-            </p>
+            <div className="rounded-md border-l-4 border-terracotta bg-terracotta/5 px-4 py-3 flex items-center justify-between gap-3">
+              <div className="text-sm text-ink-soft">
+                <span className="text-xs uppercase tracking-widest text-terracotta font-medium mr-2">Drill</span>
+                Repeat after me: <span className="font-serif text-2xl text-ink ml-1">{tutor.targetWord}</span>
+                {tutorAttempt && (
+                  <span className="ml-3 text-xs text-ink-soft">last: {tutorAttempt.accuracy}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 text-xs text-ink-soft">
+                <button
+                  onClick={async () => {
+                    try {
+                      const rate = Math.max(0.55, 1.0 - tutorRetries * 0.15);
+                      const url = await postTts(tutor.targetWord, tutorRetries === 0 ? undefined : rate);
+                      await playAudio(url);
+                    } catch {}
+                  }}
+                  className="underline hover:text-ink"
+                  disabled={busy}
+                >
+                  hear again
+                </button>
+                <button
+                  onClick={() => { setTutor(null); setTutorAttempt(null); setTutorRetries(0); dispatch({ type: "TUTOR_RESOLVED" }); }}
+                  className="underline hover:text-ink"
+                  disabled={busy}
+                >
+                  skip
+                </button>
+              </div>
+            </div>
           )}
 
           {!tutor && retryHint && (
@@ -294,7 +392,7 @@ export default function Page() {
             </div>
           )}
 
-          {!tutor && <MicButton onAudio={userSpoke} />}
+          <MicButton onAudio={userSpoke} />
         </div>
 
         <IntroducedList

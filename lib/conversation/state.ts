@@ -19,7 +19,8 @@ export type Score = {
 
 export type Turn =
   | { speaker: "ai"; text: string; phrase: Phrase; at: number }
-  | { speaker: "user"; text: string; score: Score; at: number };
+  | { speaker: "user"; text: string; score: Score; at: number }
+  | { speaker: "user-freeform"; text: string; at: number };
 
 export type Tier = "red" | "orange" | "yellow" | "green";
 
@@ -38,10 +39,12 @@ export function tierFromAvgAccuracy(avg: number): Tier {
   return "red";
 }
 
-/** A phrase is mastered when its 3 most recent attempts are all non-red. */
+/** A phrase is mastered as soon as the most recent attempt is non-red.
+ * (User-tuned: one good attempt advances. Rolling window of 3 still persists in
+ * the library display so the user can see recent history.) */
 export function isMastered(m: Mastery | undefined): boolean {
-  if (!m || (m.lastTiers ?? []).length < 3) return false;
-  return m.lastTiers.every((t) => t !== "red");
+  const last = m?.lastTiers?.[m.lastTiers.length - 1];
+  return !!last && last !== "red";
 }
 
 /** Per-character average accuracy from a score — what tiers are computed against. */
@@ -68,12 +71,18 @@ export type State = {
   introducedIds: string[];         // pair IDs the learner has been exposed to (in order)
   mastery: Record<string, Mastery>;
   phraseLibrary: Record<string, LibraryEntry>;
+  /** Transcript of the user's most recent free-form question — shown on the
+   * card alongside Claude's reply so the user can see what was heard. Cleared
+   * when the next scripted Q lands. */
+  lastUserFreeForm?: string;
 };
 
 export type Event =
   | { type: "START" }
   | { type: "AI_SPOKE"; utterance: Phrase; expectedResponse?: Phrase; pairId?: string; isNewPhrase?: boolean }
   | { type: "USER_UTTERANCE"; transcript: string; score: Score; passed: boolean; tier?: Tier | null }
+  | { type: "USER_FREEFORM"; transcript: string }
+  | { type: "AI_RESPONDED_FREEFORM"; utterance: Phrase }
   | { type: "AI_CONFIRMED" }
   | { type: "TUTOR_RESOLVED" }
   | { type: "RESET" }
@@ -122,6 +131,7 @@ export function applyEvent(s: State, e: Event): State {
         currentPairId: e.pairId,
         introducedIds: newlyIntroduced ? [...s.introducedIds, e.pairId!] : s.introducedIds,
         phraseLibrary,
+        lastUserFreeForm: undefined, // clear once we've moved on to the next scripted Q
       };
     }
 
@@ -157,7 +167,31 @@ export function applyEvent(s: State, e: Event): State {
     }
 
     case "AI_CONFIRMED":
-      return { ...s, mode: "awaiting-user-question", nextSpeaker: "user", pendingPhrase: undefined, expectedResponse: undefined, currentPairId: undefined };
+      // Keep pendingPhrase so the PhraseCard stays visible during free-form mode
+      // (it shows the AI's last scripted line in "they said"; the "your line"
+      // section morphs to the "ask a question" prompt via the isFreeForm flag).
+      // expectedResponse + currentPairId clear since the scripted exchange is done.
+      return { ...s, mode: "awaiting-user-question", nextSpeaker: "user", expectedResponse: undefined, currentPairId: undefined };
+
+    case "USER_FREEFORM": {
+      const turn: Turn = { speaker: "user-freeform", text: e.transcript, at: Date.now() };
+      return { ...s, history: [...s.history, turn], lastUserFreeForm: e.transcript };
+    }
+
+    case "AI_RESPONDED_FREEFORM": {
+      // Claude's free-form reply: show in "they said" without an expected response
+      // or scripted-pair context. The next AI_SPOKE will replace this with the
+      // scripted phrase.
+      const turn: Turn = { speaker: "ai", text: e.utterance.hanzi, phrase: e.utterance, at: Date.now() };
+      return {
+        ...s,
+        mode: "ai-speaking",
+        history: [...s.history, turn],
+        pendingPhrase: e.utterance,
+        expectedResponse: undefined,
+        currentPairId: undefined,
+      };
+    }
 
     case "TUTOR_RESOLVED":
       return { ...s, mode: "awaiting-user-question", nextSpeaker: "user" };
