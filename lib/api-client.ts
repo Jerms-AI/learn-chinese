@@ -39,11 +39,11 @@ export async function postScore(audio: Blob, referenceText: string): Promise<Sco
   return res.json();
 }
 
-export async function postTts(text: string): Promise<string> {
+export async function postTts(text: string, rate?: number): Promise<string> {
   const res = await fetch("/api/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, rate }),
   });
   if (!res.ok) throw new Error(`/api/tts ${res.status}`);
   const buf = await res.arrayBuffer();

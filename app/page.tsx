@@ -2,7 +2,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { PhraseCard } from "@/components/PhraseCard";
 import { MicButton } from "@/components/MicButton";
-import { TutorPanel, type TutorPayload } from "@/components/TutorPanel";
+import { type TutorPayload } from "@/components/TutorPanel";
 import { IntroducedList } from "@/components/IntroducedList";
 import { applyEvent, initialState, tierFromAvgAccuracy, avgWordAccuracy, type Score } from "@/lib/conversation/state";
 import { saveState, loadState, clearState } from "@/lib/conversation/persistence";
@@ -17,6 +17,7 @@ export default function Page() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [tutor, setTutor] = useState<TutorPayload | null>(null);
+  const [tutorRetries, setTutorRetries] = useState(0);
   const [lastScore, setLastScore] = useState<Score | null>(null);
   const [tutorAttempt, setTutorAttempt] = useState<Score | null>(null);
   const [retryHint, setRetryHint] = useState<string | null>(null);
@@ -229,7 +230,17 @@ export default function Page() {
 
       if (out.routeTo === "tutor" && out.tutorPayload) {
         setRetryHint(null);
+        const isSameTarget = tutor?.targetWord === out.tutorPayload.targetWord;
+        const nextRetries = isSameTarget ? tutorRetries + 1 : 0;
+        setTutorRetries(nextRetries);
         setTutor(out.tutorPayload);
+        // Auto-play the target character so the user hears what to repeat.
+        // Each consecutive retry on the same char slows down further (0.85, 0.7, 0.6 ...).
+        const rate = Math.max(0.55, 1.0 - nextRetries * 0.15);
+        try {
+          const url = await postTts(out.tutorPayload.targetWord, nextRetries === 0 ? undefined : rate);
+          await playAudio(url);
+        } catch { /* swallow; user can still try */ }
         return;
       }
 
@@ -245,6 +256,7 @@ export default function Page() {
 
       setTutorAttempt(null);
       setTutor(null);
+      setTutorRetries(0);
       setRetryHint(null);
       dispatch({ type: "AI_CONFIRMED" });
       if (out.aiUtterance) {
@@ -341,14 +353,37 @@ export default function Page() {
           })()}
 
           {tutor && (
-            <TutorPanel
-              key={tutor.targetWord}
-              payload={tutor}
-              attemptScore={tutorAttempt}
-              passThreshold={65}
-              onRetry={userSpoke}
-              onSkip={() => { setTutor(null); setTutorAttempt(null); dispatch({ type: "TUTOR_RESOLVED" }); }}
-            />
+            <div className="rounded-md border-l-4 border-terracotta bg-terracotta/5 px-4 py-3 flex items-center justify-between gap-3">
+              <div className="text-sm text-ink-soft">
+                <span className="text-xs uppercase tracking-widest text-terracotta font-medium mr-2">Drill</span>
+                Repeat after me: <span className="font-serif text-2xl text-ink ml-1">{tutor.targetWord}</span>
+                {tutorAttempt && (
+                  <span className="ml-3 text-xs text-ink-soft">last: {tutorAttempt.accuracy}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 text-xs text-ink-soft">
+                <button
+                  onClick={async () => {
+                    try {
+                      const rate = Math.max(0.55, 1.0 - tutorRetries * 0.15);
+                      const url = await postTts(tutor.targetWord, tutorRetries === 0 ? undefined : rate);
+                      await playAudio(url);
+                    } catch {}
+                  }}
+                  className="underline hover:text-ink"
+                  disabled={busy}
+                >
+                  hear again
+                </button>
+                <button
+                  onClick={() => { setTutor(null); setTutorAttempt(null); setTutorRetries(0); dispatch({ type: "TUTOR_RESOLVED" }); }}
+                  className="underline hover:text-ink"
+                  disabled={busy}
+                >
+                  skip
+                </button>
+              </div>
+            </div>
           )}
 
           {!tutor && retryHint && (
@@ -357,7 +392,7 @@ export default function Page() {
             </div>
           )}
 
-          {!tutor && <MicButton onAudio={userSpoke} />}
+          <MicButton onAudio={userSpoke} />
         </div>
 
         <IntroducedList
