@@ -74,7 +74,11 @@ export function PhraseCard({
   userJustAsked?: Phrase | null;
   onReplay?: () => void;
 }) {
-  const showsAnswer = expectedResponse && expectedResponse.hanzi !== phrase.hanzi;
+  // showsAnswer = the user has a distinct expected response.
+  // repeatMode = the AI said something the user repeats verbatim (statement-only pair).
+  // Both should render the "your line" section so the user knows what to do.
+  const showsAnswer = !!expectedResponse && expectedResponse.hanzi !== phrase.hanzi;
+  const repeatMode = !!expectedResponse && expectedResponse.hanzi === phrase.hanzi;
 
   return (
     <div className="rounded-2xl bg-card p-10 shadow-sm relative">
@@ -118,7 +122,7 @@ export function PhraseCard({
         )}
       </div>
 
-      {(showsAnswer || isFreeForm || userJustAsked) && (
+      {(showsAnswer || repeatMode || isFreeForm || userJustAsked) && (
         <div
           className={`mt-8 pt-6 px-4 pb-4 -mx-4 border-t border-dashed text-center rounded-md transition-colors ${
             isFreeForm ? "bg-terracotta/5 ring-1 ring-terracotta/20" :
@@ -135,6 +139,9 @@ export function PhraseCard({
             )}
             {userJustAsked && (
               <span className="text-xs italic text-ink-soft">(free-form — not graded)</span>
+            )}
+            {repeatMode && !lastScore && (
+              <span className="text-xs italic text-ink-soft">(repeat what they said)</span>
             )}
           </div>
           {isFreeForm ? (
@@ -156,6 +163,10 @@ export function PhraseCard({
                 </>
               )}
             </>
+          ) : repeatMode && !lastScore ? (
+            <div className="py-2 text-sm text-ink-soft">
+              Hold space and say the phrase above.
+            </div>
           ) : (
             <>
               {lastScore ? (
