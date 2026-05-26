@@ -4,6 +4,8 @@ import type { Phrase } from "@/lib/decks/schema";
 import { loadAllDecks } from "@/lib/decks/loader";
 import { pickPhraseProgressive } from "@/lib/decks/selector";
 import { getAnthropic, CLAUDE_HAIKU_MODEL } from "@/lib/providers/anthropic";
+import { isMastered } from "./state";
+import type { Pair } from "@/lib/decks/schema";
 
 export type OrchestratorInput = {
   history: Turn[];
@@ -164,34 +166,49 @@ type FreeFormResult = {
   userAugmented?: Phrase;
   /** The AI's natural reply (with optional segue to the next scripted Q). */
   aiReply?: Phrase;
+  /** Pair ID Claude picked from the candidate pool, if any. Validated by caller. */
+  chosenPairId?: string;
 };
 
-async function generateFreeFormReply(ctx: FreeFormContext): Promise<FreeFormResult> {
+async function generateContextualReply(
+  ctx: FreeFormContext,
+  candidates: Pair[],
+  introducedIds: string[],
+  mastery: Record<string, import("./state").Mastery>
+): Promise<FreeFormResult> {
+  // Annotate candidates with status so Claude knows what to prefer.
+  const introducedSet = new Set(introducedIds);
+  const annotated = candidates.map((p) => ({
+    id: p.id,
+    q: p.q,
+    a: p.a,
+    statement: p.statement,
+    tags: p.tags,
+    status: !introducedSet.has(p.id) ? "new" : isMastered(mastery[p.id]) ? "mastered" : "learning",
+  }));
+
   try {
     const client = getAnthropic();
     const resp = await client.messages.create({
       model: CLAUDE_HAIKU_MODEL,
-      max_tokens: 300,
-      system: `You are a friendly Mandarin tutor. The user just said something free-form in Mandarin (transcribed as userSaid). After your reply, the system plays a scripted practice question (nextScriptedQ) which the user should answer with nextExpectedResponse.
+      max_tokens: 400,
+      system: `You are a friendly Mandarin tutor leading a free-flowing conversation that stays within a fixed pool of chapter phrases. The user just said something free-form. You will do THREE things in JSON:
 
-You MUST return TWO things in your JSON:
-1. user: pinyin + english translation of what the user said (userSaid is hanzi only from Azure — give the matching pinyin with tone marks and a faithful English translation).
-2. reply: your one-to-two-sentence Mandarin response to the user.
+1. user: pinyin (with tone marks) + English translation of what the user said.
+2. reply: ONE or TWO short Mandarin statement sentences as a natural conversational reply. Do NOT ask a question — the scripted phrase comes after.
+3. chosenPairId: pick the next scripted phrase to drill from the candidates list.
 
-Rules for the reply:
-1. ONE or TWO short Mandarin sentences — like a friend, not a lecturer.
-2. Your reply MUST be a statement. Do NOT ask the user any question — the scripted Q comes next.
-3. Do NOT include or paraphrase the scripted Q itself.
-4. SEGUE NATURALLY toward the next scripted Q's topic:
-   - Normal case (new topic): end with one short statement mentioning the topic. e.g. user: "你好吗?" + nextScriptedQ: "你是美国人吗?" → reply: "我很好，谢谢。我还没去过美国。"
-   - SAME-QUESTION-DIFFERENT-ANSWER case: if nextScriptedQ closely resembles prevScriptedQ but nextExpectedResponse differs from prevUserAnswer (Pimsleur teaches multiple variant answers), frame the segue as a scenario shift so the user knows to give a different answer. e.g. prev: "你会说英文吗?" / user said "我会说一点儿" / next: "你会说英文吗?" / expected: "我不会说英文" → reply: "好。现在想象另一种情况，别人完全不会英文。"
-   - For minor variations (greeting changes, polite vs. casual), reply with something like "好的。我换一种问法。"
-5. Keep total reply to two short sentences max.
+Picking rules:
+- Pick what fits the CONVERSATIONAL CONTEXT — if the user asked about food, choose a food-related candidate; if they asked about your day, a time/feelings one. Build coherent dialogue threads.
+- PREFER candidates with status "new" or "learning" (the learner makes progress). "mastered" candidates are review-only; pick them only if no contextual fit exists in new/learning.
+- DON'T pick a candidate whose q/statement closely resembles the prevScriptedQ — don't immediately re-ask the same kind of question.
+- Your reply's last sentence should gently segue to the topic of the picked phrase so the transition feels natural.
 
-Output ONLY this JSON shape (no markdown):
+Output ONLY this JSON (no markdown):
 {
   "user": { "pinyin": "...", "english": "..." },
-  "reply": { "hanzi": "...", "pinyin": "...", "english": "..." }
+  "reply": { "hanzi": "...", "pinyin": "...", "english": "..." },
+  "chosenPairId": "<id from candidates>"
 }`,
       messages: [{
         role: "user",
@@ -200,8 +217,7 @@ Output ONLY this JSON shape (no markdown):
           recentHistory: ctx.recentHistory.slice(-6),
           prevScriptedQ: ctx.prevScriptedQ,
           prevUserAnswer: ctx.prevUserAnswer,
-          nextScriptedQ: ctx.nextScriptedQ,
-          nextExpectedResponse: ctx.nextExpectedResponse,
+          candidates: annotated,
         }),
       }],
     });
@@ -210,6 +226,7 @@ Output ONLY this JSON shape (no markdown):
     const parsed = JSON.parse(cleaned) as {
       user?: { pinyin?: string; english?: string };
       reply?: { hanzi?: string; pinyin?: string; english?: string };
+      chosenPairId?: string;
     };
     const userAugmented = parsed.user?.pinyin && parsed.user?.english
       ? { hanzi: ctx.userTranscript, pinyin: parsed.user.pinyin, english: parsed.user.english }
@@ -217,7 +234,7 @@ Output ONLY this JSON shape (no markdown):
     const aiReply = parsed.reply?.hanzi && parsed.reply?.pinyin && parsed.reply?.english
       ? { hanzi: parsed.reply.hanzi, pinyin: parsed.reply.pinyin, english: parsed.reply.english }
       : { hanzi: "好。", pinyin: "hǎo.", english: "OK." };
-    return { userAugmented, aiReply };
+    return { userAugmented, aiReply, chosenPairId: parsed.chosenPairId };
   } catch {
     return { aiReply: { hanzi: "好。", pinyin: "hǎo.", english: "OK." } };
   }
@@ -250,37 +267,79 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
     }
   }
 
-  // SCRIPTED CONTENT — initial turn OR following a free-form user turn.
-  // The deck-driven selector picks the next pair (mastery-aware). Claude only
-  // composes the conversational reply text when the user spoke free-form.
-  const { pair, isNew, aiSays, userSays } = await pickNextScripted(input);
-
-  // Hunt back through history for the most recent scripted AI Q + user scripted answer
-  // so Claude can detect "same question, different expected answer" cases.
+  // Hunt back through history for the most recent scripted AI Q + user scripted answer.
   const reversed = [...input.history].reverse();
   const prevAiTurn = reversed.find((t) => t.speaker === "ai");
   const prevUserTurn = reversed.find((t) => t.speaker === "user");
   const prevScriptedQ = prevAiTurn?.speaker === "ai" ? prevAiTurn.phrase : null;
   const prevUserAnswer = prevUserTurn?.speaker === "user" ? prevUserTurn.text : null;
 
-  const freeFormResult = input.userFreeFormTranscript
-    ? await generateFreeFormReply({
+  // FREE-FORM PATH: Claude picks the next scripted phrase contextually from the
+  // active chapter's pool + composes the conversational reply.
+  if (input.userFreeFormTranscript) {
+    const decks = await loadAllDecks(path.join(process.cwd(), "decks"));
+    const filtered = input.activeDeckIds.length > 0
+      ? decks.filter((d) => input.activeDeckIds.includes(d.deck.id))
+      : decks;
+    const candidatePool = filtered
+      .flatMap((d) => d.pairs)
+      .filter((p) => p.id !== input.currentPairId)
+      .slice(0, 30);
+
+    const result = await generateContextualReply(
+      {
         userTranscript: input.userFreeFormTranscript,
         recentHistory: input.history,
-        nextScriptedQ: { hanzi: aiSays.hanzi, pinyin: aiSays.pinyin, english: aiSays.english },
-        nextExpectedResponse: { hanzi: userSays.hanzi, pinyin: userSays.pinyin, english: userSays.english },
+        nextScriptedQ: null,
+        nextExpectedResponse: null,
         prevScriptedQ,
         prevUserAnswer,
-      })
-    : undefined;
+      },
+      candidatePool,
+      input.introducedIds ?? [],
+      input.mastery ?? {}
+    );
 
+    // Look up the chosen pair from the candidate pool. Fall back to the
+    // deterministic selector if Claude's id is invalid (hallucinated, missing, etc.).
+    let pickedPair = candidatePool.find((p) => p.id === result.chosenPairId);
+    let pickedIsNew = !!pickedPair && !(input.introducedIds ?? []).includes(pickedPair.id);
+    if (!pickedPair) {
+      const fb = await pickNextScripted(input);
+      pickedPair = fb.pair;
+      pickedIsNew = fb.isNew;
+    }
+    const aiSays = pickedPair.q ?? pickedPair.statement!;
+    const userSays = pickedPair.a ?? pickedPair.statement ?? aiSays;
+
+    return {
+      speakerNext: "ai",
+      routeTo: "conversation",
+      pairId: pickedPair.id,
+      isNewPhrase: pickedIsNew,
+      aiResponse: result.aiReply,
+      userAugmented: result.userAugmented,
+      aiUtterance: {
+        hanzi: aiSays.hanzi,
+        pinyin: aiSays.pinyin,
+        english: aiSays.english,
+        audioUrl: "/mocks/silence.mp3",
+      },
+      expectedUserResponse: {
+        hanzi: userSays.hanzi,
+        pinyin: userSays.pinyin,
+        english: userSays.english,
+      },
+    };
+  }
+
+  // INITIAL AI TURN — no free-form input. Use the deterministic selector.
+  const { pair, isNew, aiSays, userSays } = await pickNextScripted(input);
   return {
     speakerNext: "ai",
     routeTo: "conversation",
     pairId: pair.id,
     isNewPhrase: isNew,
-    aiResponse: freeFormResult?.aiReply,
-    userAugmented: freeFormResult?.userAugmented,
     aiUtterance: {
       hanzi: aiSays.hanzi,
       pinyin: aiSays.pinyin,
