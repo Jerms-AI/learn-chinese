@@ -1,6 +1,9 @@
 "use client";
 import type { Score, Turn, Mastery } from "@/lib/conversation/state";
 import type { OrchestratorOutput } from "@/lib/conversation/orchestrator";
+// Score type is still imported for fetchTurn's lastUserScore arg — kept in the
+// type system so scoring can come back later without a refactor. postScore
+// helper is intentionally not restored (no scoring path is wired up).
 
 export async function fetchTurn(args: {
   history: Turn[];
@@ -11,6 +14,8 @@ export async function fetchTurn(args: {
   currentPairId?: string;
   introducedIds?: string[];
   mastery?: Record<string, Mastery>;
+  pairUsage?: Record<string, { count: number; lastTurn: number }>;
+  historyTurnCount?: number;
   userFreeFormTranscript?: string;
 }): Promise<OrchestratorOutput> {
   const res = await fetch("/api/turn", {
@@ -27,15 +32,6 @@ export async function postTranscribe(audio: Blob): Promise<{ transcript: string 
   form.append("audio", audio, "speech.webm");
   const res = await fetch("/api/transcribe", { method: "POST", body: form });
   if (!res.ok) throw new Error(`/api/transcribe ${res.status}`);
-  return res.json();
-}
-
-export async function postScore(audio: Blob, referenceText: string): Promise<Score & { transcript: string }> {
-  const form = new FormData();
-  form.append("audio", audio, "speech.webm");
-  form.append("referenceText", referenceText);
-  const res = await fetch("/api/score", { method: "POST", body: form });
-  if (!res.ok) throw new Error(`/api/score ${res.status}`);
   return res.json();
 }
 

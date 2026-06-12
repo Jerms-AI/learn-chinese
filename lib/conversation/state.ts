@@ -59,6 +59,10 @@ export function avgWordAccuracy(score: Score): number {
 export type LibraryEntry = {
   prompt: Phrase;           // what the AI says — the "question side" of the pair
   response?: Phrase;        // what the user should say — usually the "answer side"
+  userResponse?: { hanzi: string; english?: string };
+                            // user's most recent reply to this prompt (free-form).
+                            // English is filled in once the server augments it;
+                            // pinyin is always computed client-side from hanzi.
 };
 
 export type State = {
@@ -71,6 +75,11 @@ export type State = {
   introducedIds: string[];         // pair IDs the learner has been exposed to (in order)
   mastery: Record<string, Mastery>;
   phraseLibrary: Record<string, LibraryEntry>;
+  /** Per-pair usage stats — used to bias the orchestrator toward phrases the
+   * AI has touched least / least recently, so the conversation organically
+   * covers the whole chapter instead of looping on a few favorites. lastTurn
+   * is the history.length at the time the pair was used. */
+  pairUsage: Record<string, { count: number; lastTurn: number }>;
   /** Transcript of the user's most recent free-form question — shown on the
    * card alongside Claude's reply so the user can see what was heard. Cleared
    * when the next scripted Q lands. */
@@ -79,9 +88,10 @@ export type State = {
 
 export type Event =
   | { type: "START" }
-  | { type: "AI_SPOKE"; utterance: Phrase; expectedResponse?: Phrase; pairId?: string; isNewPhrase?: boolean }
+  | { type: "AI_SPOKE"; utterance: Phrase; expectedResponse?: Phrase; pairId?: string; isNewPhrase?: boolean; usedPairIds?: string[] }
   | { type: "USER_UTTERANCE"; transcript: string; score: Score; passed: boolean; tier?: Tier | null }
   | { type: "USER_FREEFORM"; transcript: string }
+  | { type: "USER_FREEFORM_AUGMENT"; pairId: string; hanzi: string; english: string }
   | { type: "AI_RESPONDED_FREEFORM"; utterance: Phrase }
   | { type: "AI_CONFIRMED" }
   | { type: "TUTOR_RESOLVED" }
@@ -96,6 +106,7 @@ export function initialState(): State {
     introducedIds: [],
     mastery: {},
     phraseLibrary: {},
+    pairUsage: {},
   };
 }
 
@@ -122,6 +133,15 @@ export function applyEvent(s: State, e: Event): State {
               [e.pairId]: { prompt: e.utterance, response: e.expectedResponse },
             }
           : s.phraseLibrary;
+      // Bump usage counts for every pair Claude drew vocab from this turn. The
+      // turn-index is the history length AFTER appending this turn — so the
+      // orchestrator can compute "turns since" cleanly when scoring recency.
+      const nextHistoryLen = s.history.length + 1;
+      const pairUsage = { ...s.pairUsage };
+      for (const id of e.usedPairIds ?? []) {
+        const prior = pairUsage[id] ?? { count: 0, lastTurn: 0 };
+        pairUsage[id] = { count: prior.count + 1, lastTurn: nextHistoryLen };
+      }
       // No expectedResponse = free-form mode (conversational ping-pong, user just
       // responds however). Otherwise we're in the older scripted-A flow where the
       // user must say a specific phrase next.
@@ -135,6 +155,7 @@ export function applyEvent(s: State, e: Event): State {
         currentPairId: e.pairId,
         introducedIds: newlyIntroduced ? [...s.introducedIds, e.pairId!] : s.introducedIds,
         phraseLibrary,
+        pairUsage,
         lastUserFreeForm: undefined, // clear once we've moved on to the next AI turn
       };
     }
@@ -179,7 +200,38 @@ export function applyEvent(s: State, e: Event): State {
 
     case "USER_FREEFORM": {
       const turn: Turn = { speaker: "user-freeform", text: e.transcript, at: Date.now() };
-      return { ...s, history: [...s.history, turn], lastUserFreeForm: e.transcript };
+      // Attach the raw transcript to the library entry for the pair the user is
+      // responding to. English gets filled in later by USER_FREEFORM_AUGMENT
+      // once the server returns the augmented version.
+      let phraseLibrary = s.phraseLibrary;
+      if (s.currentPairId && s.phraseLibrary[s.currentPairId]) {
+        phraseLibrary = {
+          ...s.phraseLibrary,
+          [s.currentPairId]: {
+            ...s.phraseLibrary[s.currentPairId],
+            userResponse: { hanzi: e.transcript },
+          },
+        };
+      }
+      return { ...s, history: [...s.history, turn], lastUserFreeForm: e.transcript, phraseLibrary };
+    }
+
+    case "USER_FREEFORM_AUGMENT": {
+      // Server returned the cleaned hanzi + english for the user's free-form
+      // reply. Update the library entry for the pair it was responding to.
+      // Carries pairId explicitly so it doesn't race with a subsequent AI_SPOKE
+      // that would have moved currentPairId.
+      if (!s.phraseLibrary[e.pairId]) return s;
+      return {
+        ...s,
+        phraseLibrary: {
+          ...s.phraseLibrary,
+          [e.pairId]: {
+            ...s.phraseLibrary[e.pairId],
+            userResponse: { hanzi: e.hanzi, english: e.english },
+          },
+        },
+      };
     }
 
     case "AI_RESPONDED_FREEFORM": {

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { transcribeMandarin } from "@/lib/providers/azure-transcribe";
-import { transcodeToPcm16k } from "@/lib/audio/transcode";
+import { transcribeMandarin } from "@/lib/providers/openai-transcribe";
 
 export const runtime = "nodejs";
 
@@ -8,8 +7,7 @@ export async function POST(req: NextRequest) {
   const form = await req.formData();
   const audioFile = form.get("audio") as File | null;
 
-  if (!process.env.AZURE_SPEECH_KEY) {
-    // Mock: pretend the user said something generic.
+  if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json({ transcript: "[mock transcript]" });
   }
 
@@ -18,7 +16,6 @@ export async function POST(req: NextRequest) {
   }
 
   const webm = Buffer.from(await audioFile.arrayBuffer());
-  const pcm = await transcodeToPcm16k(webm);
-  const transcript = await transcribeMandarin(pcm);
+  const transcript = await transcribeMandarin(webm);
   return NextResponse.json({ transcript });
 }
