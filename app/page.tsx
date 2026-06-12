@@ -7,6 +7,7 @@ import { IntroducedList } from "@/components/IntroducedList";
 import { applyEvent, initialState } from "@/lib/conversation/state";
 import { saveState, loadState, clearState } from "@/lib/conversation/persistence";
 import { fetchTurn, postTranscribe, postTts } from "@/lib/api-client";
+import { MIN_SPEECH_BYTES, containsHanzi } from "@/lib/audio/speech-guards";
 
 function reducer(s: ReturnType<typeof initialState>, e: Parameters<typeof applyEvent>[1]) {
   return applyEvent(s, e);
@@ -86,6 +87,7 @@ export default function Page() {
   }
 
   async function aiTurn(metaIntent: string | null = null) {
+    setRetryHint(null);
     setBusy(true);
     try {
       const out = await fetchTurn({
@@ -96,6 +98,8 @@ export default function Page() {
         currentPairId: state.currentPairId,
         introducedIds: state.introducedIds,
         mastery: state.mastery,
+        pairUsage: state.pairUsage,
+        historyTurnCount: state.history.length,
       });
       if (out.aiUtterance) {
         const url = await prefetchTts(out.aiUtterance.hanzi);
@@ -105,6 +109,7 @@ export default function Page() {
           expectedResponse: out.expectedUserResponse,
           pairId: out.pairId,
           isNewPhrase: out.isNewPhrase,
+          usedPairIds: out.usedPairIds,
         });
         await playAudio(url);
       }
@@ -123,6 +128,13 @@ export default function Page() {
     const inFreeForm = state.mode === "awaiting-user-question";
     if (!inFreeForm) return;
 
+    // Near-empty audio makes the STT model hallucinate filler ("bravo.") —
+    // catch it client-side before wasting an API call.
+    if (blob.size < MIN_SPEECH_BYTES) {
+      setRetryHint("I didn't catch that — hold space while you speak, release after.");
+      return;
+    }
+
     setBusy(true);
     try {
       const { transcript } = await postTranscribe(blob);
@@ -131,6 +143,17 @@ export default function Page() {
         setRetryHint("I didn't catch that. Hold space and try again.");
         return;
       }
+      // No hanzi in a Mandarin transcription = the model guessed (hallucinated
+      // filler or an English rendering). Don't submit the turn — ask for a retry.
+      if (!containsHanzi(trimmed)) {
+        setRetryHint("I couldn't make out the Mandarin — give it another try.");
+        return;
+      }
+      setRetryHint(null);
+      // Snapshot the pair we're responding to before USER_FREEFORM/AI_SPOKE
+      // can rotate currentPairId — augmented data has to land on this entry,
+      // not the next one.
+      const pairIdForResponse = state.currentPairId;
       dispatch({ type: "USER_FREEFORM", transcript: trimmed });
       const out = await fetchTurn({
         history: state.history,
@@ -140,9 +163,21 @@ export default function Page() {
         currentPairId: state.currentPairId,
         introducedIds: state.introducedIds,
         mastery: state.mastery,
+        pairUsage: state.pairUsage,
+        historyTurnCount: state.history.length,
         userFreeFormTranscript: trimmed,
       });
-      if (out.userAugmented) setUserFreeFormPhrase(out.userAugmented);
+      if (out.userAugmented) {
+        setUserFreeFormPhrase(out.userAugmented);
+        if (pairIdForResponse) {
+          dispatch({
+            type: "USER_FREEFORM_AUGMENT",
+            pairId: pairIdForResponse,
+            hanzi: out.userAugmented.hanzi,
+            english: out.userAugmented.english,
+          });
+        }
+      }
       // Single combined utterance: AI's response + follow-up question in one
       // piece. No separate scripted Q to play afterward — pure ping-pong.
       if (out.aiUtterance) {
@@ -153,6 +188,7 @@ export default function Page() {
           expectedResponse: out.expectedUserResponse,
           pairId: out.pairId,
           isNewPhrase: out.isNewPhrase,
+          usedPairIds: out.usedPairIds,
         });
         if (url) await playAudio(url);
       }
@@ -163,7 +199,10 @@ export default function Page() {
     <main className="mx-auto max-w-6xl px-6 py-12 space-y-8">
       <header className="flex items-baseline justify-between">
         <div>
-          <h1 className="font-serif text-3xl">学中文</h1>
+          <h1 className="font-serif text-3xl">
+            学中文
+            <span className="ml-3 text-xs font-sans uppercase tracking-widest text-emerald-700 align-middle">OpenAI</span>
+          </h1>
           {state.introducedIds.length > 0 && (
             <p className="text-xs text-ink-soft mt-1">
               {state.introducedIds.length} {state.introducedIds.length === 1 ? "phrase" : "phrases"} introduced
