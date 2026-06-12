@@ -1,5 +1,7 @@
 "use client";
+import { pinyin as toPinyin } from "pinyin-pro";
 import type { LibraryEntry, Mastery, Tier } from "@/lib/conversation/state";
+import { TonedPinyin } from "@/components/TonedPinyin";
 
 const TIER_DOT_BG: Record<Tier, string> = {
   green: "bg-emerald-600",
@@ -38,8 +40,12 @@ export function IntroducedList({
   hideTranslations?: boolean;
 }) {
   return (
-    <aside className="rounded-2xl bg-card p-6 shadow-sm h-fit sticky top-6">
-      <div className="text-xs uppercase tracking-widest text-ink-soft mb-4">
+    // The card stretches with the grid row, so its bottom edge always meets
+    // the bottom of the conversation cards beside it. The list is absolutely
+    // positioned inside a flex-1 wrapper so it contributes zero intrinsic
+    // height — a long library scrolls inside the card, never grows the page.
+    <aside className="rounded-2xl bg-card p-6 shadow-sm min-h-[20rem] flex flex-col">
+      <div className="text-xs uppercase tracking-widest text-ink-soft mb-4 flex-shrink-0">
         Phrase library
         <span className="ml-2 text-ink-soft/70 normal-case tracking-normal">
           ({introducedIds.length})
@@ -51,8 +57,11 @@ export function IntroducedList({
           Hit Start — phrases appear here as they&apos;re introduced.
         </p>
       ) : (
-        <ul className="space-y-3">
-          {introducedIds.map((id) => {
+        <div className="relative flex-1">
+        <ul className="absolute inset-0 space-y-3 overflow-y-auto -mr-3 pr-3">
+          {/* State keeps introduction order; display newest-first so the
+              phrase just taught is always at the top, no scrolling. */}
+          {[...introducedIds].reverse().map((id) => {
             const entry = phraseLibrary[id];
             if (!entry) return null;
             // Q/A pairs have both sides — show both because the user practices each
@@ -71,26 +80,56 @@ export function IntroducedList({
                 <span className="flex-shrink-0 pt-1.5">
                   <MasteryDots tiers={tiers} />
                 </span>
-                <div className="min-w-0 flex-1 space-y-1.5">
+                <div className="min-w-0 flex-1 space-y-2">
                   <div>
-                    <div className="font-serif text-lg leading-tight truncate">
+                    <div className="font-serif text-lg leading-snug break-words">
                       {entry.prompt.hanzi}
                     </div>
                     {!hideTranslations && (
-                      <div className="text-xs text-ink-soft/80 truncate">
-                        {entry.prompt.english}
-                      </div>
+                      <>
+                        <div className="text-xs text-ink-soft/90 mt-0.5 break-words">
+                          <TonedPinyin text={entry.prompt.pinyin} />
+                        </div>
+                        <div className="text-xs text-ink-soft/80 break-words">
+                          {entry.prompt.english}
+                        </div>
+                      </>
                     )}
                   </div>
+                  {entry.userResponse && (
+                    <div className="pl-3 border-l-2 border-terracotta/30">
+                      <div className="text-[10px] uppercase tracking-widest text-terracotta/80 mb-0.5">you said</div>
+                      <div className="font-serif text-base leading-snug break-words">
+                        {entry.userResponse.hanzi}
+                      </div>
+                      {!hideTranslations && (
+                        <>
+                          <div className="text-xs text-ink-soft/90 mt-0.5 break-words">
+                            <TonedPinyin text={toPinyin(entry.userResponse.hanzi, { toneType: "symbol", type: "string" })} />
+                          </div>
+                          {entry.userResponse.english && (
+                            <div className="text-xs text-ink-soft/80 break-words">
+                              {entry.userResponse.english}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                   {hasBothSides && (
                     <div className="pl-3 border-l-2 border-ink-soft/10">
-                      <div className="font-serif text-base leading-tight truncate">
+                      <div className="font-serif text-base leading-snug break-words">
                         {entry.response!.hanzi}
                       </div>
                       {!hideTranslations && (
-                        <div className="text-xs text-ink-soft/80 truncate">
-                          {entry.response!.english}
-                        </div>
+                        <>
+                          <div className="text-xs text-ink-soft/90 mt-0.5 break-words">
+                            <TonedPinyin text={entry.response!.pinyin} />
+                          </div>
+                          <div className="text-xs text-ink-soft/80 break-words">
+                            {entry.response!.english}
+                          </div>
+                        </>
                       )}
                     </div>
                   )}
@@ -102,6 +141,7 @@ export function IntroducedList({
             );
           })}
         </ul>
+        </div>
       )}
     </aside>
   );
