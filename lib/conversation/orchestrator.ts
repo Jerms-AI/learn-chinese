@@ -168,6 +168,19 @@ type ConversationalTurnResult = {
   usedPairIds: string[];
 };
 
+/** Fisher–Yates copy-shuffle with injectable rng (same idiom as decks/selector).
+ * Used to randomize the chapterPool listing per turn: LLMs are strongly biased
+ * by list order, which made every conversation walk the deck top-to-bottom in
+ * the same sequence. Coverage still comes from usageCount/turnsAgo signals. */
+export function shuffled<T>(arr: readonly T[], rng: () => number = Math.random): T[] {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
 /** Parses Claude's JSON reply for a conversational turn. Pure — exported for
  * tests. Throws on non-JSON; the caller catches and substitutes its fallback.
  * userAugmented.hanzi is the raw transcript; Claude only adds pinyin/english. */
@@ -228,11 +241,13 @@ async function generateConversationalTurn(
 
 Each turn you produce ONE combined Mandarin utterance: a brief, natural response to what the user said + a follow-up question that keeps the dialogue moving. Speak like a friend, not a textbook. Aim for 1-3 short sentences total.
 
-If userSaid is null (initial turn), greet the learner and ask an opening question grounded in chapter topics.
+If userSaid is null (initial turn), greet the learner briefly, then build your opening question from the openerSeeds pairs — a random draw for this session. Do NOT fall back to the most obvious chapter opener (e.g. "do you speak Mandarin?") unless it is in openerSeeds; the point is that each session starts somewhere different.
 
 If userSaid has content, respond to it naturally then segue to your next question. The flow should feel like ping-pong — answer something → ask something → user replies → you answer + ask → etc.
 
 Picking vocabulary — the goal is to organically cover the WHOLE chapter over the course of the conversation, not to loop on a few favorites:
+- chapterPool is listed in RANDOM order, re-shuffled every turn. The listing order carries NO meaning — do not prefer earlier-listed pairs and do not walk the list in sequence. usageCount and turnsAgo are the only preference signals.
+- Vary the conversational path between sessions: open from different angles (time, food, language, greetings — whatever the chapter offers) and pivot between topics in a different order each conversation, rather than following one fixed progression.
 - Every pair in chapterPool has a usageCount (how many turns you've drawn from it) and turnsAgo (how many turns since the last time, or null if never used).
 - Strongly prefer pairs with usageCount=0 — these are the under-served topics the learner hasn't been exposed to yet. Weave them in naturally, even if it requires a small conversational pivot.
 - Among already-used pairs, prefer those with the highest turnsAgo (stale, due for revisit). Avoid pairs used in the last 1-2 turns unless it would feel unnatural to drop the thread.
@@ -251,6 +266,9 @@ Output ONLY this JSON (no markdown):
           userSaid: userTranscript,
           recentHistory: recentHistory.slice(-8),
           chapterPool: annotated,
+          // Pool order is already shuffled per turn, so the head of the list
+          // is a uniform random draw — used to force opener variety.
+          openerSeeds: userTranscript === null ? annotated.slice(0, 2).map((p) => p.id) : [],
         }),
       }],
     });
@@ -276,7 +294,9 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
   const filtered = input.activeDeckIds.length > 0
     ? decks.filter((d) => input.activeDeckIds.includes(d.deck.id))
     : decks;
-  const chapterPool = filtered.flatMap((d) => d.pairs);
+  // Shuffled per turn so the listing order can't rut the conversation into
+  // one fixed deck-order progression (see shuffled() above).
+  const chapterPool = shuffled(filtered.flatMap((d) => d.pairs));
 
   // Pure ping-pong: one Claude call per turn. Initial turn (no userFreeFormTranscript)
   // produces an opener; subsequent turns produce a response + follow-up question.
