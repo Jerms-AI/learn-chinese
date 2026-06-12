@@ -18,6 +18,13 @@ export type OrchestratorInput = {
   /** Comprehensible-input state: which pairs the learner has been introduced to + their mastery records. */
   introducedIds?: string[];
   mastery?: Record<string, Mastery>;
+  /** Per-pair usage counts + last-turn index. Used to bias Claude toward
+   * pairs it has touched least and least recently, so the dialogue organically
+   * cycles through the whole chapter instead of looping on a few favorites. */
+  pairUsage?: Record<string, { count: number; lastTurn: number }>;
+  /** Total turn count at the moment of this call (= state.history.length).
+   * Pairs with this lastTurn value of pairUsage will compute as "turnsAgo=0". */
+  historyTurnCount?: number;
   /** When set, the user just spoke free-form Mandarin (not a scripted answer).
    * The orchestrator should produce a natural response AND choose the next scripted Q. */
   userFreeFormTranscript?: string;
@@ -161,6 +168,26 @@ type ConversationalTurnResult = {
   usedPairIds: string[];
 };
 
+/** Parses Claude's JSON reply for a conversational turn. Pure — exported for
+ * tests. Throws on non-JSON; the caller catches and substitutes its fallback.
+ * userAugmented.hanzi is the raw transcript; Claude only adds pinyin/english. */
+export function parseConversationalTurn(rawText: string, userTranscript: string | null): ConversationalTurnResult {
+  const cleaned = rawText.replace(/```json\s*/g, "").replace(/```\s*$/g, "").trim();
+  const parsed = JSON.parse(cleaned) as {
+    user?: { pinyin?: string; english?: string };
+    utterance?: { hanzi?: string; pinyin?: string; english?: string };
+    usedPairIds?: string[];
+  };
+  const userAugmented = userTranscript && parsed.user?.pinyin && parsed.user?.english
+    ? { hanzi: userTranscript, pinyin: parsed.user.pinyin, english: parsed.user.english }
+    : undefined;
+  const utterance = parsed.utterance?.hanzi && parsed.utterance?.pinyin && parsed.utterance?.english
+    ? { hanzi: parsed.utterance.hanzi, pinyin: parsed.utterance.pinyin, english: parsed.utterance.english }
+    : { hanzi: "你好！", pinyin: "nǐ hǎo!", english: "Hello!" };
+  const usedPairIds = Array.isArray(parsed.usedPairIds) ? parsed.usedPairIds.filter((id) => typeof id === "string") : [];
+  return { userAugmented, utterance, usedPairIds };
+}
+
 /** Generates one conversational AI turn. Used for both the initial opener
  * (no user transcript yet) and follow-up replies (user transcript present).
  * The chapter pool informs Claude's vocab but is not a strict script — Claude
@@ -169,17 +196,28 @@ async function generateConversationalTurn(
   userTranscript: string | null,
   recentHistory: Turn[],
   chapterPool: Pair[],
-  introducedIds: string[]
+  introducedIds: string[],
+  pairUsage: Record<string, { count: number; lastTurn: number }>,
+  historyTurnCount: number,
 ): Promise<ConversationalTurnResult> {
   const introducedSet = new Set(introducedIds);
-  const annotated = chapterPool.map((p) => ({
-    id: p.id,
-    q: p.q,
-    a: p.a,
-    statement: p.statement,
-    tags: p.tags,
-    introduced: introducedSet.has(p.id),
-  }));
+  // Annotate every pair with usage count + how many turns ago it was last drawn
+  // from. Claude reads these as preference signals: prefer count=0 (un-used),
+  // then by ascending count, with a recency tiebreaker (turnsAgo high = stale,
+  // good to revisit). This is what drives organic chapter coverage.
+  const annotated = chapterPool.map((p) => {
+    const usage = pairUsage[p.id];
+    return {
+      id: p.id,
+      q: p.q,
+      a: p.a,
+      statement: p.statement,
+      tags: p.tags,
+      introduced: introducedSet.has(p.id),
+      usageCount: usage?.count ?? 0,
+      turnsAgo: usage ? Math.max(0, historyTurnCount - usage.lastTurn) : null,
+    };
+  });
 
   try {
     const client = getAnthropic();
@@ -194,9 +232,11 @@ If userSaid is null (initial turn), greet the learner and ask an opening questio
 
 If userSaid has content, respond to it naturally then segue to your next question. The flow should feel like ping-pong — answer something → ask something → user replies → you answer + ask → etc.
 
-Picking vocabulary:
-- Lean on chapter phrases/words. Mix and recombine; you don't need to use whole pair sentences verbatim.
-- Prefer un-introduced (introduced=false) phrases to expose the learner to new content. Re-use introduced phrases when they fit the conversational thread for review.
+Picking vocabulary — the goal is to organically cover the WHOLE chapter over the course of the conversation, not to loop on a few favorites:
+- Every pair in chapterPool has a usageCount (how many turns you've drawn from it) and turnsAgo (how many turns since the last time, or null if never used).
+- Strongly prefer pairs with usageCount=0 — these are the under-served topics the learner hasn't been exposed to yet. Weave them in naturally, even if it requires a small conversational pivot.
+- Among already-used pairs, prefer those with the highest turnsAgo (stale, due for revisit). Avoid pairs used in the last 1-2 turns unless it would feel unnatural to drop the thread.
+- Don't repeat the exact same phrase verbatim turn after turn — recombine, paraphrase, ask the same vocabulary in a different frame.
 - Track which chapter pairs you actually drew vocabulary from and list their ids in usedPairIds.
 
 Output ONLY this JSON (no markdown):
@@ -215,20 +255,7 @@ Output ONLY this JSON (no markdown):
       }],
     });
     const textBlock = resp.content.find((b) => b.type === "text") as { type: "text"; text: string } | undefined;
-    const cleaned = (textBlock?.text ?? "").replace(/```json\s*/g, "").replace(/```\s*$/g, "").trim();
-    const parsed = JSON.parse(cleaned) as {
-      user?: { pinyin?: string; english?: string };
-      utterance?: { hanzi?: string; pinyin?: string; english?: string };
-      usedPairIds?: string[];
-    };
-    const userAugmented = userTranscript && parsed.user?.pinyin && parsed.user?.english
-      ? { hanzi: userTranscript, pinyin: parsed.user.pinyin, english: parsed.user.english }
-      : undefined;
-    const utterance = parsed.utterance?.hanzi && parsed.utterance?.pinyin && parsed.utterance?.english
-      ? { hanzi: parsed.utterance.hanzi, pinyin: parsed.utterance.pinyin, english: parsed.utterance.english }
-      : { hanzi: "你好！", pinyin: "nǐ hǎo!", english: "Hello!" };
-    const usedPairIds = Array.isArray(parsed.usedPairIds) ? parsed.usedPairIds.filter((id) => typeof id === "string") : [];
-    return { userAugmented, utterance, usedPairIds };
+    return parseConversationalTurn(textBlock?.text ?? "", userTranscript);
   } catch {
     return {
       utterance: { hanzi: "你好！", pinyin: "nǐ hǎo!", english: "Hello!" },
@@ -241,12 +268,15 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
   const useMock = input.mock || !process.env.ANTHROPIC_API_KEY;
   if (useMock) return mockOrchestrator(input);
 
-  // Build the active-chapter pool (filtered by active deck selection).
+  // Build the active-chapter pool (filtered by active deck selection). No slice
+  // cap — even the biggest cumulative pool (Pimsleur 1-5 = ~70 pairs) fits
+  // comfortably in a Haiku prompt, and capping silently drops vocab the user
+  // selected.
   const decks = await loadAllDecks(path.join(process.cwd(), "decks"));
   const filtered = input.activeDeckIds.length > 0
     ? decks.filter((d) => input.activeDeckIds.includes(d.deck.id))
     : decks;
-  const chapterPool = filtered.flatMap((d) => d.pairs).slice(0, 30);
+  const chapterPool = filtered.flatMap((d) => d.pairs);
 
   // Pure ping-pong: one Claude call per turn. Initial turn (no userFreeFormTranscript)
   // produces an opener; subsequent turns produce a response + follow-up question.
@@ -256,7 +286,9 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
     input.userFreeFormTranscript ?? null,
     input.history,
     chapterPool,
-    input.introducedIds ?? []
+    input.introducedIds ?? [],
+    input.pairUsage ?? {},
+    input.historyTurnCount ?? input.history.length,
   );
 
   // Mark the first used pair as the "currentPair" for the library highlight.

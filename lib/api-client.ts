@@ -14,6 +14,8 @@ export async function fetchTurn(args: {
   currentPairId?: string;
   introducedIds?: string[];
   mastery?: Record<string, Mastery>;
+  pairUsage?: Record<string, { count: number; lastTurn: number }>;
+  historyTurnCount?: number;
   userFreeFormTranscript?: string;
 }): Promise<OrchestratorOutput> {
   const res = await fetch("/api/turn", {
