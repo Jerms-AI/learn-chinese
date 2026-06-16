@@ -2,8 +2,22 @@
 import { useEffect } from "react";
 import { useMicRecorder } from "@/lib/audio/use-mic-recorder";
 
-export function MicButton({ onAudio }: { onAudio: (blob: Blob) => void }) {
-  const { isRecording, start, stop } = useMicRecorder();
+export function MicButton({
+  onAudio,
+  onRecordingChange,
+  onStream,
+}: {
+  onAudio: (blob: Blob) => void;
+  onRecordingChange?: (recording: boolean) => void;
+  onStream?: (stream: MediaStream) => void;
+}) {
+  const { isRecording, start, stop } = useMicRecorder({ onStream });
+
+  // Surface recording transitions so the page can drive visualizer state.
+  useEffect(() => {
+    onRecordingChange?.(isRecording);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRecording]);
 
   const beginRecord = async () => { if (!isRecording) await start(); };
   const endRecord = async () => {

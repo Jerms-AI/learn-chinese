@@ -1,11 +1,19 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export function useMicRecorder() {
+/** Optional lifecycle hook: `onStream` fires with the live MediaStream each
+ *  time recording begins, so a visualizer can tap it. */
+export type MicRecorderOptions = {
+  onStream?: (stream: MediaStream) => void;
+};
+
+export function useMicRecorder(opts?: MicRecorderOptions) {
   const [isRecording, setIsRecording] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const optsRef = useRef<MicRecorderOptions | undefined>(opts);
+  optsRef.current = opts;
 
   // Keep the mic stream warm across recordings. Re-acquiring getUserMedia on
   // every press costs up to ~1s on Windows — long enough to clip an entire
@@ -30,6 +38,7 @@ export function useMicRecorder() {
     recorderRef.current = rec;
     rec.start();
     setIsRecording(true);
+    optsRef.current?.onStream?.(stream);
   }, [getStream]);
 
   const stop = useCallback((): Promise<Blob> => {

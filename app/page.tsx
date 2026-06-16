@@ -8,6 +8,15 @@ import { applyEvent, initialState } from "@/lib/conversation/state";
 import { saveState, loadState, clearState } from "@/lib/conversation/persistence";
 import { fetchTurn, postTranscribe, postTts } from "@/lib/api-client";
 import { MIN_SPEECH_BYTES, containsHanzi } from "@/lib/audio/speech-guards";
+import { VoiceVisualizer } from "@/components/VoiceVisualizer";
+import { deriveVisualizerState } from "@/lib/visualizer/state-map";
+import {
+  resumeAudio,
+  attachMicStream,
+  detachMicStream,
+  routeElement,
+  unrouteElement,
+} from "@/lib/visualizer/audio";
 
 function reducer(s: ReturnType<typeof initialState>, e: Parameters<typeof applyEvent>[1]) {
   return applyEvent(s, e);
@@ -35,7 +44,12 @@ export default function Page() {
   const [userFreeFormPhrase, setUserFreeFormPhrase] = useState<{ hanzi: string; pinyin: string; english: string } | null>(null);
   const [decks, setDecks] = useState<Array<{ id: string; title: string; pairCount: number }>>([]);
   const [selectedDeckId, setSelectedDeckId] = useState<string>("all");
+  // Live signals for the voice visualizer state machine.
+  const [recording, setRecording] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const hydratedRef = useRef(false);
+
+  const visualizerState = deriveVisualizerState({ recording, busy, speaking });
 
   // Hydrate state from localStorage AFTER mount so SSR + first client render agree.
   useEffect(() => {
@@ -69,6 +83,9 @@ export default function Page() {
 
   useEffect(() => { if (hydratedRef.current) saveState(state); }, [state]);
 
+  // Release the analyser's mic tap once recording ends.
+  useEffect(() => { if (!recording) detachMicStream(); }, [recording]);
+
   useEffect(() => {
     if (hydratedRef.current) {
       localStorage.setItem("learn-chinese:hide-translations:v1", hideTranslations ? "1" : "0");
@@ -78,11 +95,20 @@ export default function Page() {
   async function playAudio(url: string) {
     return new Promise<void>((resolve) => {
       const audio = new Audio(url);
+      // Route through the shared analyser so the visualizer reacts to the AI's
+      // voice, then mark the speaking state for its duration.
+      routeElement(audio);
+      setSpeaking(true);
+      const finish = () => {
+        unrouteElement(audio);
+        setSpeaking(false);
+        resolve();
+      };
       // Resolve only when playback finishes — audio.play() alone resolves on
       // start, which would let the next audio overlap this one.
-      audio.onended = () => resolve();
-      audio.onerror = () => resolve();
-      audio.play().catch(() => resolve());
+      audio.onended = finish;
+      audio.onerror = finish;
+      audio.play().catch(finish);
     });
   }
 
@@ -282,7 +308,13 @@ export default function Page() {
             </div>
           )}
 
-          <MicButton onAudio={userSpoke} />
+          <MicButton
+            onAudio={userSpoke}
+            onRecordingChange={setRecording}
+            onStream={(stream) => { resumeAudio(); attachMicStream(stream); }}
+          />
+
+          <VoiceVisualizer state={visualizerState} />
         </div>
 
         <IntroducedList
