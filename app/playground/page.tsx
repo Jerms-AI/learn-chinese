@@ -21,6 +21,14 @@ import {
   unrouteElement,
 } from "@/lib/visualizer/audio";
 import { postTts, fetchTurn } from "@/lib/api-client";
+import {
+  LEVER_GROUP,
+  LEVER_HELP,
+  GROUP_ICON,
+  PROFILE_GROUPS,
+  GLOBAL_GROUPS,
+  DEFAULT_OPEN,
+} from "@/components/playground/lever-meta";
 
 const STORE_KEY = "learn-chinese:viz-playground:v2";
 
@@ -187,41 +195,69 @@ export default function PlaygroundPage() {
           <h2 className="mb-2 text-xs uppercase tracking-wider text-ink-soft">
             {mode === "auto" ? "Editing: idle (auto preview)" : `Editing: ${editState}`}
           </h2>
-          <div className="space-y-3">
-            {PROFILE_SCHEMA.map((spec) => (
-              <LeverControl
-                key={spec.key}
-                spec={spec}
-                value={editing[spec.key] as never}
-                onChange={(v) => setLever(spec.key, v)}
-              />
-            ))}
-          </div>
+          {PROFILE_GROUPS.map((group) => {
+            const specs = PROFILE_SCHEMA.filter((s) => LEVER_GROUP[s.key] === group);
+            if (!specs.length) return null;
+            return (
+              <details key={group} open={DEFAULT_OPEN.has(group)} className="border-b border-ink-soft/10">
+                <summary className="cursor-pointer select-none py-2 text-xs font-medium text-ink">
+                  <span className="mr-1">{GROUP_ICON[group]}</span>
+                  {group}
+                </summary>
+                <div className="space-y-3 pb-3 pl-1">
+                  {specs.map((spec) => (
+                    <LeverControl
+                      key={spec.key}
+                      spec={spec}
+                      help={LEVER_HELP[spec.key]}
+                      value={editing[spec.key] as never}
+                      onChange={(v) => setLever(spec.key, v)}
+                    />
+                  ))}
+                </div>
+              </details>
+            );
+          })}
         </section>
 
         <section>
           <h2 className="mb-2 text-xs uppercase tracking-wider text-ink-soft">Global engine</h2>
-          <div className="space-y-3">
-            {GLOBAL_SCHEMA.map((spec) => (
-              <label key={spec.key} className="block">
-                <div className="flex justify-between text-xs text-ink-soft">
-                  <span>{spec.label}</span>
-                  <span className="tabular-nums">{globals[spec.key].toFixed(2)}</span>
+          {GLOBAL_GROUPS.map((group) => {
+            const specs = GLOBAL_SCHEMA.filter((s) => LEVER_GROUP[s.key] === group);
+            if (!specs.length) return null;
+            return (
+              <details key={group} open={DEFAULT_OPEN.has(group)} className="border-b border-ink-soft/10">
+                <summary className="cursor-pointer select-none py-2 text-xs font-medium text-ink">
+                  <span className="mr-1">{GROUP_ICON[group]}</span>
+                  {group}
+                </summary>
+                <div className="space-y-3 pb-3 pl-1">
+                  {specs.map((spec) => (
+                    <label key={spec.key} className="block">
+                      <div className="flex justify-between text-xs text-ink-soft">
+                        <span>{spec.label}</span>
+                        <span className="tabular-nums">{globals[spec.key].toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={spec.min}
+                        max={spec.max}
+                        step={spec.step}
+                        value={globals[spec.key]}
+                        onChange={(e) =>
+                          setGlobals((g) => ({ ...g, [spec.key]: parseFloat(e.target.value) }))
+                        }
+                        className="w-full"
+                      />
+                      <p className="mt-0.5 text-[10px] leading-snug text-ink-soft/70">
+                        {LEVER_HELP[spec.key]}
+                      </p>
+                    </label>
+                  ))}
                 </div>
-                <input
-                  type="range"
-                  min={spec.min}
-                  max={spec.max}
-                  step={spec.step}
-                  value={globals[spec.key]}
-                  onChange={(e) =>
-                    setGlobals((g) => ({ ...g, [spec.key]: parseFloat(e.target.value) }))
-                  }
-                  className="w-full"
-                />
-              </label>
-            ))}
-          </div>
+              </details>
+            );
+          })}
         </section>
 
         <div className="flex gap-2 pt-1">
