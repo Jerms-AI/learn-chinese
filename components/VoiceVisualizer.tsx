@@ -2,30 +2,43 @@
 
 import { useEffect, useRef } from "react";
 import { computeFrame } from "@/lib/visualizer/engine";
-import { readSpectrum } from "@/lib/visualizer/audio";
+import { readSpectrum, setSmoothing, setRelease } from "@/lib/visualizer/audio";
 import { canvas2dRenderer } from "@/lib/visualizer/renderers/canvas2d";
 import {
   DEFAULT_PROFILES,
   type Profile,
   type VisualizerState,
 } from "@/lib/visualizer/profile";
+import { DEFAULT_GLOBALS, type GlobalConfig } from "@/lib/visualizer/config";
 
 const easeInOut = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
 
 export function VoiceVisualizer({
   state,
   profiles = DEFAULT_PROFILES,
+  config = DEFAULT_GLOBALS,
   width = 420,
   height = 320,
   className = "",
 }: {
   state: VisualizerState;
   profiles?: Record<VisualizerState, Profile>;
+  config?: GlobalConfig;
   width?: number;
   height?: number;
   className?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const configRef = useRef(config);
+  configRef.current = config;
+
+  // Push audio-feel knobs onto the analyser/envelope whenever they change.
+  useEffect(() => {
+    setSmoothing(config.smoothing);
+  }, [config.smoothing]);
+  useEffect(() => {
+    setRelease(config.release);
+  }, [config.release]);
 
   // Morph bookkeeping lives in refs so the RAF loop reads fresh values without
   // re-subscribing every frame.
@@ -62,8 +75,8 @@ export function VoiceVisualizer({
       const dur = to.transitionMs || 1;
       const k = easeInOut(Math.min(1, Math.max(0, (now - morphStart.current) / dur)));
 
-      const { level, bands } = readSpectrum();
-      const frame = computeFrame({ from, to, k, level, bands, t: now / 1000 });
+      const { level, bands, pitch } = readSpectrum();
+      const frame = computeFrame({ from, to, k, level, bands, pitch, t: now / 1000, config: configRef.current });
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       canvas.style.backdropFilter = frame.backdropBlur > 0 ? `blur(${frame.backdropBlur}px)` : "";
       canvas2dRenderer.draw(ctx, frame, width, height);

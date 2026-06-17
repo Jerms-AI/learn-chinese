@@ -1,5 +1,8 @@
 "use client";
 
+import { sampleLogBands } from "./spectrum";
+import { autoCorrelate, pitchToNorm } from "./pitch";
+
 // A single shared Web Audio AnalyserNode that the visualizer reads each frame.
 //
 // Design notes / gotchas:
@@ -15,10 +18,33 @@ let ctx: AudioContext | null = null;
 let analyser: AnalyserNode | null = null;
 let sink: GainNode | null = null; // silent path keeping the analyser "pulled"
 let freq: Uint8Array<ArrayBuffer> | null = null;
+let timeBuf: Float32Array<ArrayBuffer> | null = null; // time domain, for pitch
+let pitchEnv = 0.5; // smoothed normalized pitch (0.5 = neutral)
 let micSource: MediaStreamAudioSourceNode | null = null;
 const elementSources = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
 
-const BANDS = 32;
+const BANDS = 48;
+let desiredSmoothing = 0.2;
+let releaseFactor = 0.85;
+
+// Envelope-follower state (persists across frames). Multiple RAF loops read the
+// spectrum, so the envelope is advanced at most once per animation frame.
+let envBands: number[] = [];
+let lastReadAt = -1;
+let cachedLevel = 0;
+
+/** Live-update the analyser's raw temporal smoothing (kept low; the envelope
+ *  follower does the perceptual smoothing). */
+export function setSmoothing(v: number): void {
+  desiredSmoothing = Math.min(0.95, Math.max(0, v));
+  if (analyser) analyser.smoothingTimeConstant = desiredSmoothing;
+}
+
+/** Live-update the envelope release (gravity). Higher = slower decay / stickier
+ *  peaks; lower = snappier tracking of cadence. */
+export function setRelease(v: number): void {
+  releaseFactor = Math.min(0.99, Math.max(0, v));
+}
 
 function ensure(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -29,9 +55,14 @@ function ensure(): AudioContext | null {
     if (!AC) return null;
     ctx = new AC();
     analyser = ctx.createAnalyser();
-    analyser.fftSize = 256; // 128 frequency bins
-    analyser.smoothingTimeConstant = 0.8;
+    analyser.fftSize = 2048; // 1024 bins — fine resolution for the voice fundamental
+    analyser.smoothingTimeConstant = desiredSmoothing;
+    // Map the useful dB window onto the 0..255 byte range. Tighter than the
+    // -100/-30 default → more contrast and sensitivity for speech.
+    analyser.minDecibels = -90;
+    analyser.maxDecibels = -38;
     freq = new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount));
+    timeBuf = new Float32Array(new ArrayBuffer(analyser.fftSize * 4));
     // Keep the analyser on a (silent) path to the destination. Some browsers
     // only update nodes that reach the destination, so a dead-end analyser
     // returns all zeros — which kills every reactive state. Zero-gain sink
@@ -99,23 +130,41 @@ export function unrouteElement(el: HTMLMediaElement): void {
 }
 
 /** Read the current spectrum. Returns zeros when nothing is wired up. */
-export function readSpectrum(): { level: number; bands: number[] } {
-  if (!analyser || !freq) return { level: 0, bands: [] };
-  analyser.getByteFrequencyData(freq);
+export function readSpectrum(): { level: number; bands: number[]; pitch: number } {
+  if (!analyser || !freq) return { level: 0, bands: [], pitch: 0.5 };
 
-  const bins = freq.length;
-  const bands: number[] = new Array(BANDS);
-  const per = Math.max(1, Math.floor(bins / BANDS));
-  let total = 0;
-  for (let b = 0; b < BANDS; b++) {
-    let sum = 0;
-    const start = b * per;
-    const end = Math.min(bins, start + per);
-    for (let i = start; i < end; i++) sum += freq[i];
-    const avg = sum / Math.max(1, end - start);
-    bands[b] = avg / 255;
-    total += avg;
+  // Several RAF loops (visualizer + level meter) read this; advance the
+  // envelope only once per frame so the decay rate stays correct.
+  const now = typeof performance !== "undefined" ? performance.now() : 0;
+  if (envBands.length === BANDS && now - lastReadAt < 8) {
+    return { level: cachedLevel, bands: envBands, pitch: pitchEnv };
   }
-  const level = total / Math.max(1, BANDS) / 255;
-  return { level, bands };
+  lastReadAt = now;
+
+  analyser.getByteFrequencyData(freq);
+  // Log + triangular bucketing over the vocal range (~90 Hz–5.6 kHz at fft 2048).
+  const raw = sampleLogBands(freq, BANDS, 4, 240);
+
+  // Asymmetric envelope follower: instant attack (jump up to a louder value),
+  // gravity release (decay otherwise). Punchy transients, smooth tails —
+  // tracks speech cadence instead of mushy symmetric smoothing.
+  if (envBands.length !== BANDS) {
+    envBands = raw.slice();
+  } else {
+    for (let b = 0; b < BANDS; b++) {
+      const decayed = envBands[b] * releaseFactor;
+      envBands[b] = raw[b] > decayed ? raw[b] : decayed;
+    }
+  }
+  cachedLevel = envBands.reduce((a, x) => a + x, 0) / Math.max(1, BANDS);
+
+  // Pitch (fundamental frequency) → normalized 0..1, smoothed. Held through
+  // unvoiced gaps so the arc glides rather than snapping back to neutral.
+  if (timeBuf && ctx) {
+    analyser.getFloatTimeDomainData(timeBuf);
+    const norm = pitchToNorm(autoCorrelate(timeBuf, ctx.sampleRate));
+    if (norm >= 0) pitchEnv = pitchEnv * 0.6 + norm * 0.4;
+  }
+
+  return { level: cachedLevel, bands: envBands, pitch: pitchEnv };
 }

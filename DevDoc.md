@@ -33,6 +33,8 @@ Living document for scope, decisions, open questions, and icebox.
 
 - [x] Design spec written and approved (2026-05-25)
 - [x] Repo scaffolded with CLAUDE.md, DevDoc.md, .gitignore, README
+- [x] Voice visualizer engine — audio-reactive, per-state morphing shapes under the mic (2026-06-16, merged to `main`). Code in `lib/visualizer/**` + `components/VoiceVisualizer.tsx`; spec at `docs/superpowers/specs/2026-06-16-voice-visualizer-design.md`
+- [x] Visualizer playground at `/playground` — schema-driven sliders for every lever (per-state + global engine), talk-to-it triggers (speak text / hold-to-talk / run a real turn), live signal meter, and Copy-config export (`feat/visualizer-playground`)
 
 ---
 
@@ -50,6 +52,9 @@ Living document for scope, decisions, open questions, and icebox.
 | 2026-05-25 | Single melded conversation loop, not two modes | User clarified: AI asks → user answers → user asks → AI answers, continuous |
 | 2026-05-25 | After successful response, AI gives short confirmation then waits patiently | App is responsive, not pushy — user controls when to speak next |
 | 2026-05-25 | Anki `.apkg` import via Claude-assisted Q/A pairing | Public Pimsleur Mandarin decks exist on AnkiWeb |
+| 2026-06-16 | Voice visualizer = points-based morphing + per-state profiles + frequency-reactive (pos/size/color/glow) + schema-driven levers; Canvas2D renderer behind a pluggable `Renderer` interface | "Floating glowing wiggling" voice context; every axis (shape/color/motion/style/state) must be independently tweakable; WebGL renderer can drop in later |
+| 2026-06-16 | Shared `AnalyserNode` kept on a silent (zero-gain) path to `destination` | Strict browsers don't update a dead-end analyser → reactivity would read all zeros |
+| 2026-06-16 | Playground triggers override the static state tab for the preview | Holding the mic is inherently "listening"; the preview should follow the active trigger, while the sliders stay tied to the selected tab |
 
 ---
 

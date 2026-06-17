@@ -8,6 +8,7 @@ import {
   type Point,
 } from "./shapes";
 import type { ColorStop, FillMode, Profile } from "./profile";
+import { DEFAULT_GLOBALS, type GlobalConfig } from "./config";
 
 const TAU = Math.PI * 2;
 
@@ -30,6 +31,8 @@ export type FrameInput = {
   level: number; // overall loudness 0..1
   bands: number[]; // frequency spectrum 0..1 each
   t: number; // seconds
+  pitch?: number; // normalized fundamental pitch 0..1 (0.5 neutral); steers the arch
+  config?: GlobalConfig; // global multipliers (defaults reproduce shipped look)
 };
 
 // --- color helpers (exported for testing) -----------------------------------
@@ -92,6 +95,25 @@ function bandAt(bands: number[], p: number): number {
   return bands[idx];
 }
 
+/** Tukey-style edge taper: 1 across the middle, smooth cosine ramp to 0 within
+ *  `margin` of each end. Anchors an OPEN form's endpoints so loud low-frequency
+ *  bands at the edges don't pop. */
+export function edgeTaper(p: number, margin: number): number {
+  if (margin <= 0) return 1;
+  if (p < margin) return 0.5 * (1 - Math.cos((Math.PI * p) / margin));
+  if (p > 1 - margin) return 0.5 * (1 - Math.cos((Math.PI * (1 - p)) / margin));
+  return 1;
+}
+
+/** Sensitivity curve: gain the signal up, lift quiet detail (gamma < 1), then
+ *  gate out the noise floor so silence is truly still. */
+export function shapeSignal(v: number, gain: number, gamma: number, gate: number): number {
+  let x = v * gain;
+  if (x > 1) x = 1;
+  x = Math.pow(x, gamma);
+  return x < gate ? 0 : x;
+}
+
 /** Outward normal at point i, from neighbor tangent, flipped to face away from
  *  the origin so reactive displacement bulges outward rather than denting in. */
 function outwardNormal(pts: Point[], i: number, closed: boolean): Point {
@@ -117,6 +139,7 @@ function outwardNormal(pts: Point[], i: number, closed: boolean): Point {
 
 export function computeFrame(input: FrameInput): Frame {
   const { from, to, k, level, bands, t } = input;
+  const cfg = input.config ?? DEFAULT_GLOBALS;
 
   // Discrete params: pick the dominant profile. Geometry morphs continuously;
   // shape/fill/closed flip at the halfway point.
@@ -148,19 +171,53 @@ export function computeFrame(input: FrameInput): Frame {
   const ptsTo = shapePoints(to.shape, N, t);
   const base = morphPoints(ptsFrom, ptsTo, k);
 
+  // Sensitivity curve applied to the live loudness before it drives anything.
+  const sLevel = shapeSignal(level, cfg.gain, cfg.gamma, cfg.gate);
+
+  // Pitch → arch bend. Prefer a real fundamental-frequency estimate (passed in
+  // as 0..1); fall back to the spectral centroid when none is provided (tests).
+  let pitchBend: number;
+  if (input.pitch !== undefined && input.pitch >= 0) {
+    pitchBend = Math.max(-1, Math.min(1, (input.pitch - 0.5) * 2));
+  } else {
+    let cWsum = 0;
+    let cSum = 0;
+    for (let bi = 0; bi < bands.length; bi++) {
+      cWsum += bands[bi] * bi;
+      cSum += bands[bi];
+    }
+    const centroid = cSum > 0 ? cWsum / cSum / Math.max(1, bands.length - 1) : 0.5;
+    pitchBend = Math.max(-1, Math.min(1, (centroid - 0.5) * 2.4));
+  }
+  const pitchStrength = lerp(from.pitchStrength, to.pitchStrength, k);
+
   // Overall size: breathe motion + sound-driven pulse.
   const breathe =
-    motionType === "breathe" ? 1 + Math.sin(t * TAU * motionSpeed) * motionAmp * 0.55 : 1;
-  const sizePx = size * breathe * (1 + level * sizeStrength * 0.6);
+    motionType === "breathe" ? 1 + Math.sin(t * TAU * motionSpeed) * motionAmp * cfg.breatheMult : 1;
+  const sizePx = size * breathe * (1 + sLevel * sizeStrength * cfg.sizeMult);
 
-  const glow = glowBase * (1 + level * glowStrength * 2.5);
+  const glow = glowBase * (1 + sLevel * glowStrength * cfg.glowMult);
 
   // Flow highlight center slides along p over time; sound makes it brighter.
-  const flowCenter = (t * 0.3) % 1;
-  const flowIntensity = flowStrength * (0.4 + level * 0.9);
+  const flowCenter = (t * cfg.flowSpeed) % 1;
+  const flowIntensity = flowStrength * (0.4 + sLevel * 0.9);
 
   const cos = Math.cos(spin);
   const sin = Math.sin(spin);
+
+  // Pre-pass: per-point frequency energy + its mean, so the spectral detail can
+  // oscillate AROUND a baseline (mean-centered). The pitch arch then decides
+  // where that baseline sits, instead of a one-sided push biasing it downward.
+  const energies = new Array<number>(N);
+  let energyMean = 0;
+  for (let i = 0; i < N; i++) {
+    const pp = N <= 1 ? 0 : i / (N - 1);
+    const qq = dom.freqMap === "mirror" ? 1 - Math.abs(pp * 2 - 1) : pp;
+    const e = shapeSignal(bandAt(bands, qq), cfg.gain, cfg.gamma, cfg.gate);
+    energies[i] = e;
+    energyMean += e;
+  }
+  energyMean /= Math.max(1, N);
 
   const points: FramePoint[] = new Array(N);
   for (let i = 0; i < N; i++) {
@@ -174,23 +231,30 @@ export function computeFrame(input: FrameInput): Frame {
     }
 
     const p = N <= 1 ? 0 : i / (N - 1);
-    const energy = bandAt(bands, p);
+    const energy = energies[i];
     const normal = outwardNormal(base, i, closed);
 
     // wave motion = travelling ripple along the form (time-driven, no sound)
     const wave =
       motionType === "wave"
-        ? Math.sin(p * TAU * 3 + t * TAU * motionSpeed) * motionAmp * 0.6
+        ? Math.sin(p * TAU * 3 + t * TAU * motionSpeed) * motionAmp * cfg.waveMult
         : 0;
-    // sound-driven displacement along the outward normal
-    const disp = energy * posStrength * 0.6 + wave;
+    // Mean-centered so the detail oscillates around the (pitch-set) baseline.
+    // Tapered at the ends of an open form so the edges don't pop.
+    const taper = closed ? 1 : edgeTaper(p, 0.1);
+    const disp = ((energy - energyMean) * posStrength * cfg.posMult + wave) * taper;
 
+    // Pitch arch: a parabola peaking at the CENTER and easing to 0 at the edges
+    // ("from the middle out"). High pitch domes it up, low pitch dips it down.
+    // Gated by volume so silence stays flat.
+    const archShape = 1 - (2 * p - 1) * (2 * p - 1);
+    const pitchY = archShape * pitchBend * sLevel * pitchStrength * sizePx * 0.9;
     const x = (bx + normal.x * disp) * sizePx;
-    const y = (by + normal.y * disp) * sizePx;
+    const y = (by + normal.y * disp) * sizePx - pitchY;
 
     // color: gradient along p, then mix in flow highlight + sound brightening
     let color = sampleGradient(dom.colorStops, p);
-    const flowW = Math.max(0, 1 - circDist(p, flowCenter) / 0.18);
+    const flowW = Math.max(0, 1 - circDist(p, flowCenter) / cfg.flowWidth);
     const mixAmt = clamp01(flowW * flowIntensity + energy * colorStrength * 0.6);
     if (mixAmt > 0) color = mixRGB(color, flowColor, mixAmt);
 

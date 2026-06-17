@@ -22,6 +22,12 @@ export const MOTION_TYPES: MotionType[] = ["breathe", "wave", "spin", "none"];
 export type FillMode = "solid" | "gradient" | "stroke";
 export const FILL_MODES: FillMode[] = ["solid", "gradient", "stroke"];
 
+// How the frequency spectrum maps across the form:
+//  - linear: low freq at the start (left), high freq at the end (right)
+//  - mirror: low freq at BOTH edges, high freq in the CENTER (symmetric waveform)
+export type FreqMap = "linear" | "mirror";
+export const FREQ_MAPS: FreqMap[] = ["linear", "mirror"];
+
 export type ColorStop = { pos: number; color: string };
 
 export type Profile = {
@@ -39,6 +45,8 @@ export type Profile = {
   sizeStrength: number;
   colorStrength: number;
   glowStrength: number;
+  freqMap: FreqMap; // how the spectrum spreads across the form
+  pitchStrength: number; // spectral centroid (pitch/brightness) -> global arch up / dip down
 
   // time-driven idle motion (plays without any sound)
   motionType: MotionType;
@@ -75,6 +83,8 @@ export const PROFILE_SCHEMA: LeverSpec[] = [
   { key: "sizeStrength", label: "Sound → size", type: "number", min: 0, max: 1, step: 0.01 },
   { key: "colorStrength", label: "Sound → color", type: "number", min: 0, max: 1, step: 0.01 },
   { key: "glowStrength", label: "Sound → glow", type: "number", min: 0, max: 1, step: 0.01 },
+  { key: "freqMap", label: "Frequency layout", type: "select", options: FREQ_MAPS },
+  { key: "pitchStrength", label: "Pitch → arch", type: "number", min: 0, max: 1, step: 0.01 },
   { key: "motionType", label: "Idle motion", type: "select", options: MOTION_TYPES },
   { key: "motionAmp", label: "Motion amount", type: "number", min: 0, max: 1, step: 0.01 },
   { key: "motionSpeed", label: "Motion speed", type: "number", min: 0, max: 3, step: 0.01 },
@@ -124,6 +134,8 @@ export const DEFAULT_PROFILES: Record<VisualizerState, Profile> = {
     sizeStrength: 0,
     colorStrength: 0,
     glowStrength: 0,
+    freqMap: "linear",
+    pitchStrength: 0,
     motionType: "breathe",
     motionAmp: 0.6,
     motionSpeed: 0.7,
@@ -152,7 +164,9 @@ export const DEFAULT_PROFILES: Record<VisualizerState, Profile> = {
     sizeStrength: 0.4,
     colorStrength: 1,
     glowStrength: 1,
-    motionType: "wave",
+    freqMap: "mirror",
+    pitchStrength: 0.7,
+    motionType: "none",
     motionAmp: 0.3,
     motionSpeed: 0.9,
     glow: 28,
@@ -181,6 +195,8 @@ export const DEFAULT_PROFILES: Record<VisualizerState, Profile> = {
     sizeStrength: 0,
     colorStrength: 0,
     glowStrength: 0,
+    freqMap: "linear",
+    pitchStrength: 0,
     motionType: "wave",
     motionAmp: 0.6,
     motionSpeed: 1.3,
@@ -208,6 +224,8 @@ export const DEFAULT_PROFILES: Record<VisualizerState, Profile> = {
     sizeStrength: 0.6,
     colorStrength: 1,
     glowStrength: 1,
+    freqMap: "linear",
+    pitchStrength: 0,
     motionType: "breathe",
     motionAmp: 0.45,
     motionSpeed: 0.6,
