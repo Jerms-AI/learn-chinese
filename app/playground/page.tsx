@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { VoiceVisualizer } from "@/components/VoiceVisualizer";
 import { LeverControl } from "@/components/playground/LeverControl";
 import { StatePicker, type PreviewMode } from "@/components/playground/StatePicker";
@@ -30,6 +31,12 @@ import {
   DEFAULT_OPEN,
 } from "@/components/playground/lever-meta";
 
+// WebGL renderer is client-only (no SSR).
+const GlassVisualizer = dynamic(
+  () => import("@/components/GlassVisualizer").then((m) => m.GlassVisualizer),
+  { ssr: false },
+);
+
 const STORE_KEY = "learn-chinese:viz-playground:v2";
 
 export default function PlaygroundPage() {
@@ -38,6 +45,7 @@ export default function PlaygroundPage() {
   );
   const [globals, setGlobals] = useState<GlobalConfig>({ ...DEFAULT_GLOBALS });
   const [mode, setMode] = useState<PreviewMode>("idle");
+  const [renderMode, setRenderMode] = useState<"2d" | "glass">("2d");
   const [recording, setRecording] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -153,19 +161,49 @@ export default function PlaygroundPage() {
   const editing = profiles[editState];
 
   return (
-    <main className="grid min-h-screen grid-cols-1 lg:grid-cols-[1fr_400px]">
-      {/* Stage — dark so the glow reads */}
-      <div className="relative flex min-h-[55vh] items-center justify-center bg-neutral-900">
-        <VoiceVisualizer
-          state={previewState}
-          profiles={profiles}
-          config={globals}
-          width={480}
-          height={420}
-        />
+    <main
+      className="grid min-h-screen grid-cols-1 lg:grid-cols-[1fr_400px]"
+      // Re-theme the whole playground to a unified dark grey by overriding the
+      // Amber color tokens for this subtree (stage, panel, and glass backdrop).
+      style={
+        {
+          "--color-parchment": "#2a2a2a",
+          "--color-card": "#383838",
+          "--color-ink": "#ededed",
+          "--color-ink-soft": "#a0a0a0",
+          "--color-border": "#4a4a4a",
+        } as React.CSSProperties
+      }
+    >
+      {/* Stage — matches the panel grey; the glass canvas is transparent over it */}
+      <div className="relative flex min-h-[55vh] items-center justify-center bg-parchment">
+        {renderMode === "glass" ? (
+          <GlassVisualizer state={previewState} profiles={profiles} config={globals} width={480} height={440} />
+        ) : (
+          <VoiceVisualizer
+            state={previewState}
+            profiles={profiles}
+            config={globals}
+            width={480}
+            height={420}
+          />
+        )}
         <div className="absolute left-4 top-4 text-xs text-white/55">
           previewing: <span className="text-white/90 capitalize">{previewState}</span>
           {mode === "auto" ? " · auto" : ""}
+        </div>
+        <div className="absolute right-4 top-4 flex gap-1">
+          {(["2d", "glass"] as const).map((r) => (
+            <button
+              key={r}
+              onClick={() => setRenderMode(r)}
+              className={`rounded px-2 py-1 text-xs ${
+                renderMode === r ? "bg-white text-neutral-900" : "bg-white/15 text-white"
+              }`}
+            >
+              {r === "2d" ? "Shapes" : "Glass"}
+            </button>
+          ))}
         </div>
       </div>
 
