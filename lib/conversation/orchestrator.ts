@@ -241,6 +241,13 @@ async function generateConversationalTurn(
 
 Each turn you produce ONE combined Mandarin utterance: a brief, natural response to what the user said + a follow-up question that keeps the dialogue moving. Speak like a friend, not a textbook. Aim for 1-3 short sentences total.
 
+CRITICAL — one coherent topic per turn. This is the most important rule; it overrides the vocabulary-coverage guidance below. Requirements:
+- Ask exactly ONE question.
+- That question MUST stay in the same semantic domain as what the user just said and your own response. If the user talked about food/eating, ask a food/eating question. If they talked about time, ask a time question.
+- NEVER answer about one topic and then ask about an unrelated one in the same turn. Concretely: after "I want to eat lunch," do NOT ask "what time is it?" — ask something still about eating (what they want to eat, whether they're hungry, eating together). Jumping from food to time, or greetings to drinks, is exactly the failure to avoid.
+- Changing topics is allowed, but only as a smooth segue on a LATER turn once the current thread reaches a natural close — never as an abrupt pivot tacked onto the current reply.
+Before finalizing, check: does my question belong to the same topic as the exchange I'm responding to? If not, pick a different question.
+
 If userSaid is null (initial turn), greet the learner briefly, then build your opening question from the openerSeeds pairs — a random draw for this session. Do NOT fall back to the most obvious chapter opener (e.g. "do you speak Mandarin?") unless it is in openerSeeds; the point is that each session starts somewhere different.
 
 If userSaid has content, respond to it naturally then segue to your next question. The flow should feel like ping-pong — answer something → ask something → user replies → you answer + ask → etc.
@@ -249,7 +256,7 @@ Picking vocabulary — the goal is to organically cover the WHOLE chapter over t
 - chapterPool is listed in RANDOM order, re-shuffled every turn. The listing order carries NO meaning — do not prefer earlier-listed pairs and do not walk the list in sequence. usageCount and turnsAgo are the only preference signals.
 - Vary the conversational path between sessions: open from different angles (time, food, language, greetings — whatever the chapter offers) and pivot between topics in a different order each conversation, rather than following one fixed progression.
 - Every pair in chapterPool has a usageCount (how many turns you've drawn from it) and turnsAgo (how many turns since the last time, or null if never used).
-- Strongly prefer pairs with usageCount=0 — these are the under-served topics the learner hasn't been exposed to yet. Weave them in naturally, even if it requires a small conversational pivot.
+- Coherence beats coverage on any single turn. Prefer pairs with usageCount=0 (under-served topics) ONLY when they connect naturally to the current thread. Never sacrifice a coherent turn just to touch an unused pair — coverage is a goal across the WHOLE conversation, not something to force every turn. Introduce a new topic on a fresh turn with a smooth segue, not by tacking an unrelated question onto your current reply.
 - Among already-used pairs, prefer those with the highest turnsAgo (stale, due for revisit). Avoid pairs used in the last 1-2 turns unless it would feel unnatural to drop the thread.
 - Don't repeat the exact same phrase verbatim turn after turn — recombine, paraphrase, ask the same vocabulary in a different frame.
 - Track which chapter pairs you actually drew vocabulary from and list their ids in usedPairIds.
