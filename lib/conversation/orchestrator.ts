@@ -3,7 +3,7 @@ import type { Turn, Score, Mastery } from "./state";
 import type { Phrase } from "@/lib/decks/schema";
 import { loadAllDecks } from "@/lib/decks/loader";
 import { pickPhraseProgressive } from "@/lib/decks/selector";
-import { getAnthropic, CLAUDE_HAIKU_MODEL } from "@/lib/providers/anthropic";
+import { getAnthropic, CLAUDE_MODEL } from "@/lib/providers/anthropic";
 import type { Pair } from "@/lib/decks/schema";
 
 export type OrchestratorInput = {
@@ -28,6 +28,10 @@ export type OrchestratorInput = {
   /** When set, the user just spoke free-form Mandarin (not a scripted answer).
    * The orchestrator should produce a natural response AND choose the next scripted Q. */
   userFreeFormTranscript?: string;
+  /** How far the tutor may stray from the active lesson (0-3):
+   * 0 = on-lesson (near-verbatim), 1 = recombine known words only (default),
+   * 2 = may pull from other lessons in the same track, 3 = free natural talk. */
+  organicLevel?: number;
   mock?: boolean;
 };
 
@@ -201,6 +205,31 @@ export function parseConversationalTurn(rawText: string, userTranscript: string 
   return { userAugmented, utterance, usedPairIds };
 }
 
+/** Which broad family a deck id belongs to, so "organic level 2" can widen the
+ * pool to sibling lessons (all Pimsleur, or all HSK) without crossing tracks. */
+export function deckFamily(id: string): string {
+  if (id.startsWith("pimsleur")) return "pimsleur";
+  if (id.startsWith("hsk")) return "hsk";
+  return id;
+}
+
+/** The vocabulary-strictness clause injected into the system prompt, keyed to
+ * the organic-level slider (0 strict → 3 free). chapterPool is the vocab the
+ * model is given; this text governs how far it may reach beyond it. */
+export function vocabPolicy(level: number): string {
+  switch (level) {
+    case 0:
+      return `VOCABULARY — ON LESSON (strictest): Use ONLY phrases from chapterPool, staying as close to their exact wording as possible. Do not introduce any new words, and avoid inventive recombination — echo and lightly adapt the chapter's own phrases. If a topic can't continue with chapter phrases, pick a different chapter phrase.`;
+    case 2:
+      return `VOCABULARY — MORE ORGANIC: Prefer chapterPool, but you MAY draw on the wider pool you've been given (sibling lessons from the same track). Keep any word from beyond the learner's current lesson occasional, and make sure its meaning is clear from the english translation you output. Do not invent words that appear nowhere in chapterPool.`;
+    case 3:
+      return `VOCABULARY — MUCH MORE ORGANIC: Converse naturally like a real tutor. Prefer chapterPool vocabulary, but use whatever words the conversation genuinely calls for — including words beyond any lesson — as long as you stay comprehensible and the english translation always conveys the meaning. Keep it anchored to the current topic; don't show off with rare vocabulary.`;
+    case 1:
+    default:
+      return `VOCABULARY — BARELY ORGANIC (default): Use ONLY words and grammar that appear in chapterPool — the learner hasn't been taught anything else, so one unknown word breaks the exercise. BUT recombine and rephrase those known words freely to keep the dialogue fresh: new sentences, different framings, varied questions. Variety comes from novel combinations of known words, never from new words. E.g. if drinks are in scope but "hot/cold" is not, ask "coffee or tea?" (in-chapter), never "hot or cold?".`;
+  }
+}
+
 /** Generates one conversational AI turn. Used for both the initial opener
  * (no user transcript yet) and follow-up replies (user transcript present).
  * The chapter pool informs Claude's vocab but is not a strict script — Claude
@@ -212,6 +241,7 @@ async function generateConversationalTurn(
   introducedIds: string[],
   pairUsage: Record<string, { count: number; lastTurn: number }>,
   historyTurnCount: number,
+  organicLevel: number,
 ): Promise<ConversationalTurnResult> {
   const introducedSet = new Set(introducedIds);
   // Annotate every pair with usage count + how many turns ago it was last drawn
@@ -235,9 +265,17 @@ async function generateConversationalTurn(
   try {
     const client = getAnthropic();
     const resp = await client.messages.create({
-      model: CLAUDE_HAIKU_MODEL,
-      max_tokens: 400,
-      system: `You are a friendly Mandarin tutor having a natural back-and-forth conversation with a learner. Your job is to keep a coherent dialogue going while staying within the vocabulary and grammar patterns of the active chapter (chapterPool). Vocabulary outside the chapter is allowed sparingly when it would feel unnatural to avoid, but mostly use the chapter's words and patterns.
+      model: CLAUDE_MODEL,
+      // Adaptive thinking gives Sonnet 5 a brief reasoning pass to catch
+      // state-tracking slips (don't re-ask a settled question, don't parrot the
+      // user's line). Low effort keeps that pass short so latency stays modest;
+      // max_tokens is raised so the thinking tokens don't crowd out the JSON.
+      thinking: { type: "adaptive" },
+      output_config: { effort: "low" },
+      max_tokens: 2000,
+      system: `You are a friendly Mandarin tutor having a natural back-and-forth conversation with a learner. Your job is to keep a coherent dialogue going, drawing on the active chapter (chapterPool) for vocabulary and grammar.
+
+${vocabPolicy(organicLevel)}
 
 Each turn you produce ONE combined Mandarin utterance: a brief, natural response to what the user said + a follow-up question that keeps the dialogue moving. Speak like a friend, not a textbook. Aim for 1-3 short sentences total.
 
@@ -247,6 +285,12 @@ CRITICAL — one coherent topic per turn. This is the most important rule; it ov
 - NEVER answer about one topic and then ask about an unrelated one in the same turn. Concretely: after "I want to eat lunch," do NOT ask "what time is it?" — ask something still about eating (what they want to eat, whether they're hungry, eating together). Jumping from food to time, or greetings to drinks, is exactly the failure to avoid.
 - Changing topics is allowed, but only as a smooth segue on a LATER turn once the current thread reaches a natural close — never as an abrupt pivot tacked onto the current reply.
 Before finalizing, check: does my question belong to the same topic as the exchange I'm responding to? If not, pick a different question.
+
+CRITICAL — your role and voice. You are the learner's conversation PARTNER. You speak only YOUR OWN side of the dialogue.
+- Each chapterPool pair has a "q" (the asker's line) and an "a" (the answerer's line). These show both sides of an exchange — they are NOT both yours to say. When the learner is answering you, the "a" line is THEIR line, not yours. Never speak the user's answer back to them as if it were your own (e.g. after they order coffee, do NOT say "two cups, thank you" — that's their line). Acknowledge in your own voice ("好，两杯咖啡" / "OK, two coffees") and move the conversation forward.
+- React like a real person to the MEANING of what they said, don't just echo their words.
+
+CRITICAL — track what's already settled. Read recentHistory and the user's latest message before choosing your question. NEVER ask something that has already been answered or established. If the user just said they want coffee, do NOT ask "coffee or tea?" — that's already decided; ask the natural next thing (how many, sugar if in scope, etc.). Re-asking a settled question is a serious error; a coverage signal (usageCount=0) never justifies asking something the conversation has already resolved.
 
 If userSaid is null (initial turn), greet the learner briefly, then build your opening question from the openerSeeds pairs — a random draw for this session. Do NOT fall back to the most obvious chapter opener (e.g. "do you speak Mandarin?") unless it is in openerSeeds; the point is that each session starts somewhere different.
 
@@ -298,12 +342,19 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
   // comfortably in a Haiku prompt, and capping silently drops vocab the user
   // selected.
   const decks = await loadAllDecks(path.join(process.cwd(), "decks"));
+  const level = input.organicLevel ?? 1;
   const filtered = input.activeDeckIds.length > 0
     ? decks.filter((d) => input.activeDeckIds.includes(d.deck.id))
     : decks;
+  // Organic level >= 2 widens the vocab pool to sibling lessons in the same
+  // track (all Pimsleur, or all HSK), so the tutor can reach a step beyond the
+  // selected lesson. Levels 0-1 stay strictly within the selected chapter.
+  const poolDecks = level >= 2 && input.activeDeckIds.length > 0
+    ? decks.filter((d) => new Set(input.activeDeckIds.map(deckFamily)).has(deckFamily(d.deck.id)))
+    : filtered;
   // Shuffled per turn so the listing order can't rut the conversation into
   // one fixed deck-order progression (see shuffled() above).
-  const chapterPool = shuffled(filtered.flatMap((d) => d.pairs));
+  const chapterPool = shuffled(poolDecks.flatMap((d) => d.pairs));
 
   // Pure ping-pong: one Claude call per turn. Initial turn (no userFreeFormTranscript)
   // produces an opener; subsequent turns produce a response + follow-up question.
@@ -316,6 +367,7 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
     input.introducedIds ?? [],
     input.pairUsage ?? {},
     input.historyTurnCount ?? input.history.length,
+    level,
   );
 
   // Mark the first used pair as the "currentPair" for the library highlight.

@@ -12,7 +12,11 @@ export function getAnthropic(): Anthropic {
   return client;
 }
 
-export const CLAUDE_MODEL = "claude-sonnet-4-6";
+/** Conversation orchestrator model. Sonnet 5 gives near-Opus instruction-following
+ * (holds the layered role / coherence / vocab-scope rules far better than Haiku)
+ * at Sonnet cost + latency, which matters for the real-time voice loop. Thinking is
+ * disabled at the call site to keep turns fast and avoid eating the small token budget. */
+export const CLAUDE_MODEL = "claude-sonnet-5";
 /** Faster model for short free-form replies where quality is sufficient and latency
  * dominates UX. ~2-3x quicker than Sonnet on this kind of short structured output. */
 export const CLAUDE_HAIKU_MODEL = "claude-haiku-4-5-20251001";
