@@ -6,7 +6,7 @@ import { MicButton } from "@/components/MicButton";
 import { IntroducedList } from "@/components/IntroducedList";
 import { applyEvent, initialState } from "@/lib/conversation/state";
 import { saveState, loadState, clearState } from "@/lib/conversation/persistence";
-import { fetchTurn, postTranscribe, postTts } from "@/lib/api-client";
+import { fetchTurn, postTranscribe, postTts, postAsk, type AskAnswer } from "@/lib/api-client";
 import { MIN_SPEECH_BYTES, containsHanzi } from "@/lib/audio/speech-guards";
 import { VoiceVisualizer } from "@/components/VoiceVisualizer";
 import { deriveVisualizerState } from "@/lib/visualizer/state-map";
@@ -44,7 +44,12 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [retryHint, setRetryHint] = useState<string | null>(null);
   const [hideTranslations, setHideTranslations] = useState(false);
+  // When on, all tutor audio (and replays) synthesize at a slower rate.
+  const [slowSpeech, setSlowSpeech] = useState(false);
   const [userFreeFormPhrase, setUserFreeFormPhrase] = useState<{ hanzi: string; pinyin: string; english: string } | null>(null);
+  // Result of the most recent "ask in English" lookup (hold E). Shown until the
+  // next action; also saved into state.myWords.
+  const [askAnswer, setAskAnswer] = useState<AskAnswer | null>(null);
   const [decks, setDecks] = useState<Array<{ id: string; title: string; pairCount: number }>>([]);
   const [selectedDeckId, setSelectedDeckId] = useState<string>("all");
   // How far the tutor may stray from the active lesson (0 strict → 3 free).
@@ -64,6 +69,10 @@ export default function Page() {
     if (savedHide === "1") {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional one-shot hydration from localStorage
       setHideTranslations(true);
+    }
+    if (localStorage.getItem("learn-chinese:slow-speech:v1") === "1") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional one-shot hydration from localStorage
+      setSlowSpeech(true);
     }
     const savedDeck = localStorage.getItem("learn-chinese:active-deck:v1");
     if (savedDeck) {
@@ -109,6 +118,12 @@ export default function Page() {
     }
   }, [hideTranslations]);
 
+  useEffect(() => {
+    if (hydratedRef.current) {
+      localStorage.setItem("learn-chinese:slow-speech:v1", slowSpeech ? "1" : "0");
+    }
+  }, [slowSpeech]);
+
   async function playAudio(url: string) {
     return new Promise<void>((resolve) => {
       const audio = new Audio(url);
@@ -144,6 +159,7 @@ export default function Page() {
         pairUsage: state.pairUsage,
         historyTurnCount: state.history.length,
         organicLevel,
+        userPhrases: state.myWords.map((w) => ({ id: w.id, ...w.phrase })),
       });
       if (out.aiUtterance) {
         const url = await prefetchTts(out.aiUtterance.hanzi);
@@ -163,9 +179,47 @@ export default function Page() {
   /** Pre-fetch the TTS audio URL so we can dispatch the UI update + start
    * playback in the same tick (no silent gap while Azure synthesizes). */
   async function prefetchTts(text: string): Promise<string> {
-    const url = await postTts(text);
+    const url = await postTts(text, slowSpeech ? 0.7 : undefined);
     setAudioUrl(url);
     return url;
+  }
+
+  // "Ask in English" flow (hold E): transcribe the English question, look up the
+  // Mandarin, show + speak it, and save it to the learner's word bank so it
+  // resurfaces in future conversation.
+  async function askInEnglish(blob: Blob) {
+    if (blob.size < MIN_SPEECH_BYTES) {
+      setRetryHint("I didn't catch that — hold E while you ask, release after.");
+      return;
+    }
+    setBusy(true);
+    setRetryHint(null);
+    try {
+      const { transcript } = await postTranscribe(blob, "en");
+      const question = transcript.trim();
+      if (!question) {
+        setRetryHint("I didn't catch the question. Hold E and try again.");
+        return;
+      }
+      const answer = await postAsk(question);
+      setAskAnswer(answer);
+      setUserFreeFormPhrase(null);
+      dispatch({
+        type: "ADD_USER_WORD",
+        word: {
+          id: `user-${answer.hanzi}`,
+          phrase: { hanzi: answer.hanzi, pinyin: answer.pinyin, english: answer.english },
+          addedAt: Date.now(),
+        },
+      });
+      // Speak the new word so the learner hears its pronunciation.
+      const url = await prefetchTts(answer.hanzi);
+      await playAudio(url);
+    } catch {
+      setRetryHint("Couldn't look that up — try asking again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function userSpoke(blob: Blob) {
@@ -210,6 +264,7 @@ export default function Page() {
         pairUsage: state.pairUsage,
         historyTurnCount: state.history.length,
         organicLevel,
+        userPhrases: state.myWords.map((w) => ({ id: w.id, ...w.phrase })),
         userFreeFormTranscript: trimmed,
       });
       if (out.userAugmented) {
@@ -302,11 +357,21 @@ export default function Page() {
             ))}
           </select>
           <button
+            onClick={() => setSlowSpeech((v) => !v)}
+            disabled={busy}
+            aria-pressed={slowSpeech}
+            title="Play the tutor's speech more slowly"
+            className={`text-xs underline ${slowSpeech ? "text-terracotta" : "text-ink-soft hover:text-ink"}`}
+          >
+            {slowSpeech ? "🐢 slow speech: on" : "🐢 slow speech"}
+          </button>
+          <button
             onClick={() => {
               if (confirm("Reset all progress (mastery, history, introduced phrases)?")) {
                 clearState();
                 setRetryHint(null);
                 setUserFreeFormPhrase(null);
+                setAskAnswer(null);
                 dispatch({ type: "RESET" });
               }
             }}
@@ -329,7 +394,9 @@ export default function Page() {
               isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
               hideTranslations={hideTranslations}
               onToggleTranslations={() => setHideTranslations((v) => !v)}
-              onReplay={() => audioUrl && playAudio(audioUrl)}
+              onReplay={async () => {
+                if (state.pendingPhrase) await playAudio(await prefetchTts(state.pendingPhrase.hanzi));
+              }}
             />
           )}
 
@@ -345,6 +412,28 @@ export default function Page() {
             </div>
           )}
 
+          {askAnswer && (
+            <div className="rounded-2xl bg-card p-10 shadow-sm text-center ring-1 ring-emerald-700/20">
+              <div className="text-[10px] uppercase tracking-widest text-emerald-700">You asked how to say</div>
+              <div className="mt-2 font-serif text-6xl leading-tight tracking-wide">{askAnswer.hanzi}</div>
+              <div className="mt-3 text-xl"><TonedPinyin text={askAnswer.pinyin} /></div>
+              <div className="mt-1 text-ink-soft">{askAnswer.english}</div>
+              {askAnswer.note && <div className="mt-3 text-sm text-ink-soft italic">{askAnswer.note}</div>}
+              <div className="mt-4 flex items-center justify-center gap-4 text-xs">
+                <button
+                  onClick={async () => { await playAudio(await prefetchTts(askAnswer.hanzi)); }}
+                  className="underline text-ink-soft hover:text-ink"
+                >
+                  ▶ hear it again
+                </button>
+                <button onClick={() => setAskAnswer(null)} className="underline text-ink-soft hover:text-ink">
+                  dismiss
+                </button>
+              </div>
+              <div className="mt-2 text-[11px] text-ink-soft">Saved to My words — it&rsquo;ll come up again in conversation.</div>
+            </div>
+          )}
+
           {retryHint && (
             <div className="rounded-md border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-ink-soft">
               {retryHint}
@@ -353,6 +442,7 @@ export default function Page() {
 
           <MicButton
             onAudio={userSpoke}
+            onAsk={askInEnglish}
             onRecordingChange={setRecording}
             onStream={(stream) => { resumeAudio(); attachMicStream(stream); }}
           />
@@ -360,13 +450,35 @@ export default function Page() {
           <VoiceVisualizer state={visualizerState} />
         </div>
 
-        <IntroducedList
-          introducedIds={state.introducedIds}
-          phraseLibrary={state.phraseLibrary}
-          mastery={state.mastery}
-          currentPairId={state.currentPairId}
-          hideTranslations={hideTranslations}
-        />
+        <div className="space-y-6">
+          <IntroducedList
+            introducedIds={state.introducedIds}
+            phraseLibrary={state.phraseLibrary}
+            mastery={state.mastery}
+            currentPairId={state.currentPairId}
+            hideTranslations={hideTranslations}
+          />
+
+          {state.myWords.length > 0 && (
+            <div className="rounded-2xl bg-card p-5 shadow-sm ring-1 ring-ink-soft/10">
+              <div className="text-[10px] uppercase tracking-widest text-emerald-700 mb-3">
+                My words ({state.myWords.length})
+              </div>
+              <ul className="space-y-3">
+                {state.myWords.map((w) => (
+                  <li key={w.id} className="flex items-baseline gap-3">
+                    <span className="font-serif text-2xl leading-none">{w.phrase.hanzi}</span>
+                    {!hideTranslations && (
+                      <span className="text-sm text-ink-soft">
+                        <TonedPinyin text={w.phrase.pinyin} /> · {w.phrase.english}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );

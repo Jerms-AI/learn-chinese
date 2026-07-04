@@ -15,14 +15,17 @@ function getClient(): OpenAI {
   return client;
 }
 
-export async function transcribeMandarin(webm: Buffer): Promise<string> {
+/** @param language ISO-639-1 hint for the STT model. "zh" for the user's
+ *  Mandarin answers (default); "en" for the "ask in English" flow, where the
+ *  user speaks an English question and a "zh" hint would garble it. */
+export async function transcribeSpeech(webm: Buffer, language: "zh" | "en" = "zh"): Promise<string> {
   // OpenAI's SDK accepts a web-standard File. webm is one of the supported
   // input formats so we can skip the ffmpeg→PCM transcode entirely.
   const file = new File([new Uint8Array(webm)], "speech.webm", { type: "audio/webm" });
   const res = await getClient().audio.transcriptions.create({
     file,
     model: MODEL,
-    language: "zh",
+    language,
   });
   return res.text;
 }

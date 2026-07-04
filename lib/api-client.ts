@@ -18,6 +18,7 @@ export async function fetchTurn(args: {
   historyTurnCount?: number;
   userFreeFormTranscript?: string;
   organicLevel?: number;
+  userPhrases?: Array<{ id: string; hanzi: string; pinyin: string; english: string }>;
 }): Promise<OrchestratorOutput> {
   const res = await fetch("/api/turn", {
     method: "POST",
@@ -28,12 +29,27 @@ export async function fetchTurn(args: {
   return res.json();
 }
 
-export async function postTranscribe(audio: Blob): Promise<{ transcript: string }> {
+export async function postTranscribe(audio: Blob, lang: "zh" | "en" = "zh"): Promise<{ transcript: string }> {
   const form = new FormData();
   form.append("audio", audio, "speech.webm");
+  form.append("lang", lang);
   const res = await fetch("/api/transcribe", { method: "POST", body: form });
   if (!res.ok) throw new Error(`/api/transcribe ${res.status}`);
   return res.json();
+}
+
+export type AskAnswer = { hanzi: string; pinyin: string; english: string; note?: string };
+
+/** Ask "how do I say X in Chinese?" — returns the target Mandarin phrase. */
+export async function postAsk(question: string): Promise<AskAnswer> {
+  const res = await fetch("/api/ask", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok) throw new Error(`/api/ask ${res.status}`);
+  const { answer } = (await res.json()) as { answer: AskAnswer };
+  return answer;
 }
 
 export async function postTts(text: string, rate?: number): Promise<string> {

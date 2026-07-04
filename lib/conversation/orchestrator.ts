@@ -32,6 +32,10 @@ export type OrchestratorInput = {
    * 0 = on-lesson (near-verbatim), 1 = recombine known words only (default),
    * 2 = may pull from other lessons in the same track, 3 = free natural talk. */
   organicLevel?: number;
+  /** Words the learner personally asked for ("how do I say X"). Merged into the
+   * vocab pool as ALWAYS in-scope regardless of organicLevel, so they resurface
+   * in conversation over time. */
+  userPhrases?: Array<{ id: string; hanzi: string; pinyin: string; english: string }>;
   mock?: boolean;
 };
 
@@ -259,6 +263,8 @@ async function generateConversationalTurn(
       introduced: introducedSet.has(p.id),
       usageCount: usage?.count ?? 0,
       turnsAgo: usage ? Math.max(0, historyTurnCount - usage.lastTurn) : null,
+      // Learner's own asked-for word — always usable, and worth resurfacing.
+      userRequested: (p.tags ?? []).includes("user-word"),
     };
   });
 
@@ -303,6 +309,7 @@ Picking vocabulary — the goal is to organically cover the WHOLE chapter over t
 - Coherence beats coverage on any single turn. Prefer pairs with usageCount=0 (under-served topics) ONLY when they connect naturally to the current thread. Never sacrifice a coherent turn just to touch an unused pair — coverage is a goal across the WHOLE conversation, not something to force every turn. Introduce a new topic on a fresh turn with a smooth segue, not by tacking an unrelated question onto your current reply.
 - Among already-used pairs, prefer those with the highest turnsAgo (stale, due for revisit). Avoid pairs used in the last 1-2 turns unless it would feel unnatural to drop the thread.
 - Don't repeat the exact same phrase verbatim turn after turn — recombine, paraphrase, ask the same vocabulary in a different frame.
+- Pairs with "userRequested": true are words the learner personally asked you to teach them. They are ALWAYS allowed no matter the vocabulary policy above (the learner explicitly wanted them), and you should weave them into the conversation from time to time to reinforce them — especially freshly-added ones (usageCount 0). Don't force one in every turn; let them surface naturally like any other under-served pair.
 - Track which chapter pairs you actually drew vocabulary from and list their ids in usedPairIds.
 
 Output ONLY this JSON (no markdown):
@@ -354,7 +361,15 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
     : filtered;
   // Shuffled per turn so the listing order can't rut the conversation into
   // one fixed deck-order progression (see shuffled() above).
-  const chapterPool = shuffled(poolDecks.flatMap((d) => d.pairs));
+  const chapterPairs = shuffled(poolDecks.flatMap((d) => d.pairs));
+  // The learner's own asked-for words are always part of the pool, regardless of
+  // organic level — they explicitly requested them, so they're never out of scope.
+  const userPairs: Pair[] = (input.userPhrases ?? []).map((w) => ({
+    id: w.id,
+    statement: { hanzi: w.hanzi, pinyin: w.pinyin, english: w.english },
+    tags: ["user-word"],
+  }));
+  const chapterPool = [...chapterPairs, ...userPairs];
 
   // Pure ping-pong: one Claude call per turn. Initial turn (no userFreeFormTranscript)
   // produces an opener; subsequent turns produce a response + follow-up question.

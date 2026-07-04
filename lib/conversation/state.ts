@@ -65,6 +65,15 @@ export type LibraryEntry = {
                             // pinyin is always computed client-side from hanzi.
 };
 
+/** A phrase the learner personally asked for via the "ask in English" flow
+ * (e.g. "how do I say water?" → 水). Stored so it can resurface in future
+ * conversation turns and be reviewed in the "My words" panel. */
+export type UserWord = {
+  id: string;        // stable, derived from hanzi (e.g. "user-水") so re-asking dedups
+  phrase: Phrase;    // hanzi / pinyin / english
+  addedAt: number;   // ms timestamp
+};
+
 export type State = {
   mode: Mode;
   history: Turn[];
@@ -84,6 +93,9 @@ export type State = {
    * card alongside Claude's reply so the user can see what was heard. Cleared
    * when the next scripted Q lands. */
   lastUserFreeForm?: string;
+  /** Words the learner asked for via "ask in English", most-recent first. Fed
+   * back into the orchestrator so they resurface in conversation over time. */
+  myWords: UserWord[];
 };
 
 export type Event =
@@ -95,6 +107,7 @@ export type Event =
   | { type: "AI_RESPONDED_FREEFORM"; utterance: Phrase }
   | { type: "AI_CONFIRMED" }
   | { type: "TUTOR_RESOLVED" }
+  | { type: "ADD_USER_WORD"; word: UserWord }
   | { type: "RESET" }
   | { type: "REHYDRATE"; state: State };
 
@@ -107,6 +120,7 @@ export function initialState(): State {
     mastery: {},
     phraseLibrary: {},
     pairUsage: {},
+    myWords: [],
   };
 }
 
@@ -247,6 +261,13 @@ export function applyEvent(s: State, e: Event): State {
         expectedResponse: undefined,
         currentPairId: undefined,
       };
+    }
+
+    case "ADD_USER_WORD": {
+      // Dedup by id (re-asking the same word refreshes it and floats it to the
+      // top) so the list doesn't accumulate duplicates.
+      const rest = s.myWords.filter((w) => w.id !== e.word.id);
+      return { ...s, myWords: [e.word, ...rest] };
     }
 
     case "TUTOR_RESOLVED":
