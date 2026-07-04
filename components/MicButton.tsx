@@ -28,8 +28,22 @@ export function MicButton({
   };
 
   useEffect(() => {
+    // Only suppress push-to-talk when focus is in a TEXT-entry field (where the
+    // spacebar types a space). A focused slider / checkbox / button must NOT
+    // block recording — a range input is still an INPUT but the user isn't
+    // typing into it, so a naive tagName==="INPUT" check wrongly kills the mic.
+    const isTextEntry = () => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el) return false;
+      if (el.isContentEditable || el.tagName === "TEXTAREA") return true;
+      if (el.tagName === "INPUT") {
+        const type = (el as HTMLInputElement).type;
+        return !["range", "checkbox", "radio", "button", "submit", "reset"].includes(type);
+      }
+      return false;
+    };
     const down = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !e.repeat && document.activeElement?.tagName !== "INPUT") {
+      if (e.code === "Space" && !e.repeat && !isTextEntry()) {
         e.preventDefault();
         beginRecord();
       }

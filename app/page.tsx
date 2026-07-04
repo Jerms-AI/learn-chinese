@@ -35,6 +35,9 @@ function expandSelectedDeck(id: string): string[] {
   return [id];
 }
 
+// Labels for the organic slider (index = level 0-3).
+const ORGANIC_LABELS = ["On lesson", "Barely", "More", "Much more"] as const;
+
 export default function Page() {
   const [state, dispatch] = useReducer(reducer, initialState());
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -44,6 +47,8 @@ export default function Page() {
   const [userFreeFormPhrase, setUserFreeFormPhrase] = useState<{ hanzi: string; pinyin: string; english: string } | null>(null);
   const [decks, setDecks] = useState<Array<{ id: string; title: string; pairCount: number }>>([]);
   const [selectedDeckId, setSelectedDeckId] = useState<string>("all");
+  // How far the tutor may stray from the active lesson (0 strict → 3 free).
+  const [organicLevel, setOrganicLevel] = useState<number>(1);
   // Live signals for the voice visualizer state machine.
   const [recording, setRecording] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -64,6 +69,12 @@ export default function Page() {
     if (savedDeck) {
       setSelectedDeckId(savedDeck);
     }
+    const savedOrganic = localStorage.getItem("learn-chinese:organic-level:v1");
+    if (savedOrganic !== null) {
+      const n = Number(savedOrganic);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional one-shot hydration from localStorage
+      if (Number.isFinite(n) && n >= 0 && n <= 3) setOrganicLevel(n);
+    }
     hydratedRef.current = true;
   }, []);
 
@@ -80,6 +91,12 @@ export default function Page() {
       localStorage.setItem("learn-chinese:active-deck:v1", selectedDeckId);
     }
   }, [selectedDeckId]);
+
+  useEffect(() => {
+    if (hydratedRef.current) {
+      localStorage.setItem("learn-chinese:organic-level:v1", String(organicLevel));
+    }
+  }, [organicLevel]);
 
   useEffect(() => { if (hydratedRef.current) saveState(state); }, [state]);
 
@@ -126,6 +143,7 @@ export default function Page() {
         mastery: state.mastery,
         pairUsage: state.pairUsage,
         historyTurnCount: state.history.length,
+        organicLevel,
       });
       if (out.aiUtterance) {
         const url = await prefetchTts(out.aiUtterance.hanzi);
@@ -191,6 +209,7 @@ export default function Page() {
         mastery: state.mastery,
         pairUsage: state.pairUsage,
         historyTurnCount: state.history.length,
+        organicLevel,
         userFreeFormTranscript: trimmed,
       });
       if (out.userAugmented) {
@@ -244,6 +263,30 @@ export default function Page() {
           )}
         </div>
         <div className="flex items-center gap-4">
+          <div
+            className="flex flex-col items-start"
+            title="How far the tutor may stray from your lesson — 0 stays strictly on-lesson, 3 is free conversation"
+          >
+            <label htmlFor="organic" className="text-[10px] uppercase tracking-widest text-ink-soft">
+              Organic · {ORGANIC_LABELS[organicLevel]}
+            </label>
+            <input
+              id="organic"
+              type="range"
+              min={0}
+              max={3}
+              step={1}
+              value={organicLevel}
+              onChange={(e) => setOrganicLevel(Number(e.target.value))}
+              // Drop focus after adjusting so the spacebar returns to push-to-talk
+              // instead of staying captured by this slider.
+              onMouseUp={(e) => e.currentTarget.blur()}
+              onTouchEnd={(e) => e.currentTarget.blur()}
+              disabled={busy}
+              className="w-28 accent-terracotta cursor-pointer"
+              aria-label="Organic level"
+            />
+          </div>
           <select
             value={selectedDeckId}
             onChange={(e) => setSelectedDeckId(e.target.value)}

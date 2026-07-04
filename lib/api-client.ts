@@ -17,6 +17,7 @@ export async function fetchTurn(args: {
   pairUsage?: Record<string, { count: number; lastTurn: number }>;
   historyTurnCount?: number;
   userFreeFormTranscript?: string;
+  organicLevel?: number;
 }): Promise<OrchestratorOutput> {
   const res = await fetch("/api/turn", {
     method: "POST",
