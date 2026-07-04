@@ -50,7 +50,7 @@ export type OrchestratorOutput = {
   /** When the user just spoke free-form, the orchestrator returns the user's transcript
    * augmented with pinyin + english translation — shown in "your line" on the card. */
   userAugmented?: Phrase;
-  aiUtterance?: Phrase & { audioUrl: string };
+  aiUtterance?: Phrase & { audioUrl: string; segments?: Phrase[] };
   /** What the user should say next. Used as the reference text for Azure pronunciation scoring. */
   expectedUserResponse?: Phrase;
   /** Which deck pair this turn is about — needed for client-side mastery tracking. */
@@ -178,6 +178,9 @@ type ConversationalTurnResult = {
   /** IDs of chapter pairs Claude actually used in its utterance. Used to mark
    * them as "introduced" in the library so the user sees their progress. */
   usedPairIds: string[];
+  /** The utterance split into aligned word units (hanzi/pinyin/english per word)
+   * for the color-aligned, click-to-hear card. Empty if Claude didn't provide one. */
+  segments: Phrase[];
 };
 
 /** Fisher–Yates copy-shuffle with injectable rng (same idiom as decks/selector).
@@ -201,6 +204,7 @@ export function parseConversationalTurn(rawText: string, userTranscript: string 
   const parsed = JSON.parse(cleaned) as {
     user?: { pinyin?: string; english?: string };
     utterance?: { hanzi?: string; pinyin?: string; english?: string };
+    segments?: Array<{ hanzi?: string; pinyin?: string; english?: string }>;
     usedPairIds?: string[];
   };
   const userAugmented = userTranscript && parsed.user?.pinyin && parsed.user?.english
@@ -210,7 +214,14 @@ export function parseConversationalTurn(rawText: string, userTranscript: string 
     ? { hanzi: parsed.utterance.hanzi, pinyin: parsed.utterance.pinyin, english: parsed.utterance.english }
     : { hanzi: "你好！", pinyin: "nǐ hǎo!", english: "Hello!" };
   const usedPairIds = Array.isArray(parsed.usedPairIds) ? parsed.usedPairIds.filter((id) => typeof id === "string") : [];
-  return { userAugmented, utterance, usedPairIds };
+  // Keep only fully-populated units, dropping incomplete ones individually
+  // (the model often appends a punctuation unit like "？" with empty
+  // pinyin/english — that shouldn't nuke the whole segmentation).
+  const rawSegs = Array.isArray(parsed.segments) ? parsed.segments : [];
+  const segments: Phrase[] = rawSegs
+    .filter((s) => s?.hanzi && s?.pinyin && s?.english && /[一-鿿]/.test(s.hanzi))
+    .map((s) => ({ hanzi: s.hanzi!, pinyin: s.pinyin!, english: s.english! }));
+  return { userAugmented, utterance, usedPairIds, segments };
 }
 
 /** Which broad family a deck id belongs to, so "organic level 2" can widen the
@@ -283,7 +294,9 @@ async function generateConversationalTurn(
       // max_tokens is raised so the thinking tokens don't crowd out the JSON.
       thinking: { type: "adaptive" },
       output_config: { effort: "low" },
-      max_tokens: 2000,
+      // Ample headroom: adaptive thinking + the utterance + the per-word segment
+      // breakdown must all fit, or the JSON gets truncated / segments dropped.
+      max_tokens: 4000,
       system: `You are a friendly Mandarin tutor having a natural back-and-forth conversation with a learner. Your job is to keep a coherent dialogue going, drawing on the active chapter (chapterPool) for vocabulary and grammar.
 
 ${drillMode
@@ -323,10 +336,13 @@ Picking vocabulary — the goal is to organically cover the WHOLE chapter over t
 - Pairs with "userRequested": true are words the learner personally asked you to teach them. They are ALWAYS allowed no matter the vocabulary policy above (the learner explicitly wanted them), and you should weave them into the conversation from time to time to reinforce them — especially freshly-added ones (usageCount 0). Don't force one in every turn; let them surface naturally like any other under-served pair.
 - Track which chapter pairs you actually drew vocabulary from and list their ids in usedPairIds.
 
+ALWAYS include "segments" (required, never omit it): your utterance broken into aligned word units for a color-coded interlinear display. Split the utterance.hanzi into natural word units (usually 1-2 characters each — group only genuine multi-character words like 咖啡, 谢谢, 名字; otherwise one character per unit), and for EACH unit give its hanzi, its pinyin (tone-marked), and a short English gloss for that unit. Cover the whole utterance in order; concatenating the segment hanzi must reproduce utterance.hanzi (drop only punctuation). Give function words/particles a brief gloss (e.g. 吗 → "?", 的 → "'s").
+
 Output ONLY this JSON (no markdown):
 {
   ${userTranscript ? '"user": { "pinyin": "...", "english": "..." },' : ""}
   "utterance": { "hanzi": "...", "pinyin": "...", "english": "..." },
+  "segments": [ { "hanzi": "...", "pinyin": "...", "english": "..." }, ... ],
   "usedPairIds": ["...", "..."]
 }`,
       messages: [{
@@ -347,6 +363,7 @@ Output ONLY this JSON (no markdown):
     return {
       utterance: { hanzi: "你好！", pinyin: "nǐ hǎo!", english: "Hello!" },
       usedPairIds: [],
+      segments: [],
     };
   }
 }
@@ -419,6 +436,7 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
       pinyin: result.utterance.pinyin,
       english: result.utterance.english,
       audioUrl: "/mocks/silence.mp3",
+      segments: result.segments.length ? result.segments : undefined,
     },
     userAugmented: result.userAugmented,
     // No expectedUserResponse — the user responds free-form, no scripted scoring.

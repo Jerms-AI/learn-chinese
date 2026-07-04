@@ -79,6 +79,10 @@ export type State = {
   history: Turn[];
   nextSpeaker: Speaker;
   pendingPhrase?: Phrase;          // what AI just said
+  /** The AI's utterance broken into aligned word units (hanzi/pinyin/english per
+   * word), when the tutor provided one. Powers the color-aligned, click-to-hear
+   * phrase card. Undefined = render the phrase plainly. */
+  pendingSegments?: Phrase[];
   expectedResponse?: Phrase;       // what user should say back (scoring reference)
   currentPairId?: string;          // deck pair currently being practiced
   introducedIds: string[];         // pair IDs the learner has been exposed to (in order)
@@ -100,7 +104,7 @@ export type State = {
 
 export type Event =
   | { type: "START" }
-  | { type: "AI_SPOKE"; utterance: Phrase; expectedResponse?: Phrase; pairId?: string; isNewPhrase?: boolean; usedPairIds?: string[] }
+  | { type: "AI_SPOKE"; utterance: Phrase; segments?: Phrase[]; expectedResponse?: Phrase; pairId?: string; isNewPhrase?: boolean; usedPairIds?: string[] }
   | { type: "USER_UTTERANCE"; transcript: string; score: Score; passed: boolean; tier?: Tier | null }
   | { type: "USER_FREEFORM"; transcript: string }
   | { type: "USER_FREEFORM_AUGMENT"; pairId: string; hanzi: string; english: string }
@@ -165,6 +169,7 @@ export function applyEvent(s: State, e: Event): State {
         mode: nextMode,
         history: [...s.history, turn],
         pendingPhrase: e.utterance,
+        pendingSegments: e.segments,
         expectedResponse: e.expectedResponse,
         currentPairId: e.pairId,
         introducedIds: newlyIntroduced ? [...s.introducedIds, e.pairId!] : s.introducedIds,
@@ -258,6 +263,7 @@ export function applyEvent(s: State, e: Event): State {
         mode: "ai-speaking",
         history: [...s.history, turn],
         pendingPhrase: e.utterance,
+        pendingSegments: undefined,
         expectedResponse: undefined,
         currentPairId: undefined,
       };

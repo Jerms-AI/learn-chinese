@@ -182,6 +182,7 @@ export default function Page() {
         dispatch({
           type: "AI_SPOKE",
           utterance: out.aiUtterance,
+          segments: out.aiUtterance.segments,
           expectedResponse: out.expectedUserResponse,
           pairId: out.pairId,
           isNewPhrase: out.isNewPhrase,
@@ -198,6 +199,15 @@ export default function Page() {
     const url = await postTts(text, slowSpeech ? 0.7 : undefined);
     setAudioUrl(url);
     return url;
+  }
+
+  // Speak a single word (a clicked segment) without clobbering the main replay
+  // audio (audioUrl stays the full phrase).
+  async function speakWord(text: string) {
+    try {
+      const url = await postTts(text, slowSpeech ? 0.7 : undefined);
+      await playAudio(url);
+    } catch { /* ignore transient TTS errors on a word tap */ }
   }
 
   // "Ask in English" flow (hold E): transcribe the English question, look up the
@@ -302,6 +312,7 @@ export default function Page() {
         dispatch({
           type: "AI_SPOKE",
           utterance: out.aiUtterance,
+          segments: out.aiUtterance.segments,
           expectedResponse: out.expectedUserResponse,
           pairId: out.pairId,
           isNewPhrase: out.isNewPhrase,
@@ -428,6 +439,8 @@ export default function Page() {
           {state.pendingPhrase && (
             <PhraseCard
               phrase={state.pendingPhrase}
+              segments={state.pendingSegments}
+              onSpeakWord={speakWord}
               isNew={!state.currentPairId ? false : (state.mastery[state.currentPairId]?.attempts ?? 0) === 0}
               hideTranslations={hideTranslations}
               onToggleTranslations={() => setHideTranslations((v) => !v)}
