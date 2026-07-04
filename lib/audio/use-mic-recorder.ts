@@ -12,6 +12,7 @@ export function useMicRecorder(opts?: MicRecorderOptions) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const acquiringRef = useRef<Promise<MediaStream> | null>(null);
   const optsRef = useRef<MicRecorderOptions | undefined>(opts);
   optsRef.current = opts;
 
@@ -19,16 +20,49 @@ export function useMicRecorder(opts?: MicRecorderOptions) {
   // every press costs up to ~1s on Windows — long enough to clip an entire
   // short utterance into a header-only blob (observed: 534 bytes), which the
   // STT model then hallucinates into filler text. Acquire once, reuse for
-  // every press, release only on unmount.
+  // every press, release only on unmount. Concurrent callers share one in-flight
+  // acquisition so we never open two streams.
   const getStream = useCallback(async (): Promise<MediaStream> => {
     const existing = streamRef.current;
     if (existing && existing.getTracks().some((t) => t.readyState === "live")) {
       return existing;
     }
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    streamRef.current = stream;
-    return stream;
+    if (acquiringRef.current) return acquiringRef.current;
+    const p = navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        streamRef.current = stream;
+        acquiringRef.current = null;
+        return stream;
+      })
+      .catch((err) => {
+        acquiringRef.current = null;
+        throw err;
+      });
+    acquiringRef.current = p;
+    return p;
   }, []);
+
+  // Pre-warm the mic on the user's FIRST interaction anywhere on the page, so the
+  // first real hold isn't a cold getUserMedia (which clips a short utterance into
+  // a header-only blob → "I didn't catch that"). getUserMedia needs a user
+  // gesture, so we hook the first pointerdown/keydown, then unhook.
+  useEffect(() => {
+    let warmed = false;
+    const warm = () => {
+      if (warmed) return;
+      warmed = true;
+      getStream().catch(() => {}); // ignore denials/errors — real presses re-try
+      window.removeEventListener("pointerdown", warm);
+      window.removeEventListener("keydown", warm);
+    };
+    window.addEventListener("pointerdown", warm);
+    window.addEventListener("keydown", warm);
+    return () => {
+      window.removeEventListener("pointerdown", warm);
+      window.removeEventListener("keydown", warm);
+    };
+  }, [getStream]);
 
   const start = useCallback(async () => {
     const stream = await getStream();
