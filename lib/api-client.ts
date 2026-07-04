@@ -19,6 +19,7 @@ export async function fetchTurn(args: {
   userFreeFormTranscript?: string;
   organicLevel?: number;
   userPhrases?: Array<{ id: string; hanzi: string; pinyin: string; english: string }>;
+  drillMyWords?: boolean;
 }): Promise<OrchestratorOutput> {
   const res = await fetch("/api/turn", {
     method: "POST",

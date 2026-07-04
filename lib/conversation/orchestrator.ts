@@ -36,6 +36,10 @@ export type OrchestratorInput = {
    * vocab pool as ALWAYS in-scope regardless of organicLevel, so they resurface
    * in conversation over time. */
   userPhrases?: Array<{ id: string; hanzi: string; pinyin: string; english: string }>;
+  /** Drill mode: restrict the whole conversation to the learner's saved words
+   * (userPhrases), every turn built around them in varied contexts. Ignores the
+   * deck pool and organicLevel. No-op if there are no userPhrases. */
+  drillMyWords?: boolean;
   mock?: boolean;
 };
 
@@ -246,6 +250,7 @@ async function generateConversationalTurn(
   pairUsage: Record<string, { count: number; lastTurn: number }>,
   historyTurnCount: number,
   organicLevel: number,
+  drillMode: boolean,
 ): Promise<ConversationalTurnResult> {
   const introducedSet = new Set(introducedIds);
   // Annotate every pair with usage count + how many turns ago it was last drawn
@@ -281,7 +286,13 @@ async function generateConversationalTurn(
       max_tokens: 2000,
       system: `You are a friendly Mandarin tutor having a natural back-and-forth conversation with a learner. Your job is to keep a coherent dialogue going, drawing on the active chapter (chapterPool) for vocabulary and grammar.
 
-${vocabPolicy(organicLevel)}
+${drillMode
+  ? `DRILL MODE — the learner is deliberately practicing a specific set of words: every entry in chapterPool is one of their saved target words. This is a DRILL, not a single flowing conversation — the "one coherent topic per turn" rule below does NOT apply here. Rules:
+- EVERY turn must use at least one target word, in your question and/or the answer you invite.
+- Actively CYCLE between the different target words. If you used a word in the last turn or two, switch to a DIFFERENT target word next — even if it means an abrupt topic change (that's expected and good in a drill). Strongly prefer target words with usageCount 0; never fixate on one word for several turns in a row.
+- Vary the frame each time a word appears (e.g. for 水: "你想喝水吗？" → "水在哪儿？" → "我要一杯水，好吗？") so the learner hears and says it many different ways.
+- Keep surrounding grammar minimal and simple; don't introduce extra vocabulary beyond what's needed to build a short natural sentence around the target word.`
+  : vocabPolicy(organicLevel)}
 
 Each turn you produce ONE combined Mandarin utterance: a brief, natural response to what the user said + a follow-up question that keeps the dialogue moving. Speak like a friend, not a textbook. Aim for 1-3 short sentences total.
 
@@ -369,7 +380,10 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
     statement: { hanzi: w.hanzi, pinyin: w.pinyin, english: w.english },
     tags: ["user-word"],
   }));
-  const chapterPool = [...chapterPairs, ...userPairs];
+  // Drill mode restricts the pool to just the learner's saved words (needs at
+  // least one, else it falls back to the normal blended pool).
+  const drill = !!input.drillMyWords && userPairs.length > 0;
+  const chapterPool = drill ? userPairs : [...chapterPairs, ...userPairs];
 
   // Pure ping-pong: one Claude call per turn. Initial turn (no userFreeFormTranscript)
   // produces an opener; subsequent turns produce a response + follow-up question.
@@ -383,6 +397,7 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<Orchest
     input.pairUsage ?? {},
     input.historyTurnCount ?? input.history.length,
     level,
+    drill,
   );
 
   // Mark the first used pair as the "currentPair" for the library highlight.

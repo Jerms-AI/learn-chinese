@@ -46,6 +46,8 @@ export default function Page() {
   const [hideTranslations, setHideTranslations] = useState(false);
   // When on, all tutor audio (and replays) synthesize at a slower rate.
   const [slowSpeech, setSlowSpeech] = useState(false);
+  // Drill mode: restrict the conversation to the learner's saved "My words".
+  const [drillMyWords, setDrillMyWords] = useState(false);
   const [userFreeFormPhrase, setUserFreeFormPhrase] = useState<{ hanzi: string; pinyin: string; english: string } | null>(null);
   // Result of the most recent "ask in English" lookup (hold E). Shown until the
   // next action; also saved into state.myWords.
@@ -73,6 +75,10 @@ export default function Page() {
     if (localStorage.getItem("learn-chinese:slow-speech:v1") === "1") {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional one-shot hydration from localStorage
       setSlowSpeech(true);
+    }
+    if (localStorage.getItem("learn-chinese:drill-my-words:v1") === "1") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional one-shot hydration from localStorage
+      setDrillMyWords(true);
     }
     const savedDeck = localStorage.getItem("learn-chinese:active-deck:v1");
     if (savedDeck) {
@@ -124,6 +130,12 @@ export default function Page() {
     }
   }, [slowSpeech]);
 
+  useEffect(() => {
+    if (hydratedRef.current) {
+      localStorage.setItem("learn-chinese:drill-my-words:v1", drillMyWords ? "1" : "0");
+    }
+  }, [drillMyWords]);
+
   async function playAudio(url: string) {
     return new Promise<void>((resolve) => {
       const audio = new Audio(url);
@@ -144,7 +156,10 @@ export default function Page() {
     });
   }
 
-  async function aiTurn(metaIntent: string | null = null) {
+  // forceDrill lets the drill toggle fire an immediate drill turn before the
+  // drillMyWords state has flushed (React state isn't updated within the same
+  // click handler that called this).
+  async function aiTurn(metaIntent: string | null = null, forceDrill = false) {
     setRetryHint(null);
     setBusy(true);
     try {
@@ -160,6 +175,7 @@ export default function Page() {
         historyTurnCount: state.history.length,
         organicLevel,
         userPhrases: state.myWords.map((w) => ({ id: w.id, ...w.phrase })),
+        drillMyWords: (forceDrill || drillMyWords) && state.myWords.length > 0,
       });
       if (out.aiUtterance) {
         const url = await prefetchTts(out.aiUtterance.hanzi);
@@ -265,6 +281,7 @@ export default function Page() {
         historyTurnCount: state.history.length,
         organicLevel,
         userPhrases: state.myWords.map((w) => ({ id: w.id, ...w.phrase })),
+        drillMyWords: drillMyWords && state.myWords.length > 0,
         userFreeFormTranscript: trimmed,
       });
       if (out.userAugmented) {
@@ -357,6 +374,25 @@ export default function Page() {
             ))}
           </select>
           <button
+            onClick={() => {
+              const next = !drillMyWords;
+              setDrillMyWords(next);
+              // Turning drill on immediately poses a drill question (forceDrill,
+              // since state hasn't flushed yet in this handler).
+              if (next && !busy && state.myWords.length > 0) aiTurn(null, true);
+            }}
+            disabled={busy || state.myWords.length === 0}
+            aria-pressed={drillMyWords}
+            title={state.myWords.length === 0 ? "Ask some words first (hold E), then drill them here" : "Practice only your saved words"}
+            className={`text-xs underline ${
+              state.myWords.length === 0
+                ? "text-ink-soft/40 cursor-not-allowed no-underline"
+                : drillMyWords ? "text-terracotta" : "text-ink-soft hover:text-ink"
+            }`}
+          >
+            {drillMyWords ? "🎯 my words only: on" : "🎯 my words only"}
+          </button>
+          <button
             onClick={() => setSlowSpeech((v) => !v)}
             disabled={busy}
             aria-pressed={slowSpeech}
@@ -372,6 +408,7 @@ export default function Page() {
                 setRetryHint(null);
                 setUserFreeFormPhrase(null);
                 setAskAnswer(null);
+                setDrillMyWords(false);
                 dispatch({ type: "RESET" });
               }
             }}
