@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useReducer, useRef, useState } from "react";
+import { RotateCw } from "lucide-react";
 import { PhraseCard } from "@/components/PhraseCard";
 import { TonedPinyin } from "@/components/TonedPinyin";
 import { MicButton } from "@/components/MicButton";
@@ -156,10 +157,10 @@ export default function Page() {
     });
   }
 
-  // forceDrill lets the drill toggle fire an immediate drill turn before the
+  // drillOverride lets a caller force drill on/off for this one turn before the
   // drillMyWords state has flushed (React state isn't updated within the same
-  // click handler that called this).
-  async function aiTurn(metaIntent: string | null = null, forceDrill = false) {
+  // click handler that toggled it). Undefined = use current state (e.g. redo).
+  async function aiTurn(metaIntent: string | null = null, drillOverride?: boolean) {
     setRetryHint(null);
     setBusy(true);
     try {
@@ -175,7 +176,7 @@ export default function Page() {
         historyTurnCount: state.history.length,
         organicLevel,
         userPhrases: state.myWords.map((w) => ({ id: w.id, ...w.phrase })),
-        drillMyWords: (forceDrill || drillMyWords) && state.myWords.length > 0,
+        drillMyWords: (drillOverride ?? drillMyWords) && state.myWords.length > 0,
       });
       if (out.aiUtterance) {
         const url = await prefetchTts(out.aiUtterance.hanzi);
@@ -388,9 +389,10 @@ export default function Page() {
             onClick={() => {
               const next = !drillMyWords;
               setDrillMyWords(next);
-              // Turning drill on immediately poses a drill question (forceDrill,
-              // since state hasn't flushed yet in this handler).
-              if (next && !busy && state.myWords.length > 0) aiTurn(null, true);
+              // Immediately pose a matching question: drill on → drill question,
+              // drill off → normal question (so you're not stuck on the last
+              // drill phrase). Pass the override since state hasn't flushed yet.
+              if (!busy) aiTurn(null, next);
             }}
             disabled={busy || state.myWords.length === 0}
             aria-pressed={drillMyWords}
@@ -402,6 +404,15 @@ export default function Page() {
             }`}
           >
             {drillMyWords ? "🎯 my words only: on" : "🎯 my words only"}
+          </button>
+          <button
+            onClick={() => aiTurn()}
+            disabled={busy}
+            aria-label="New phrase"
+            title="Generate a new phrase"
+            className="inline-flex items-center justify-center rounded-full p-1 text-ink-soft hover:text-ink hover:bg-card transition disabled:opacity-40"
+          >
+            <RotateCw className="w-4 h-4" />
           </button>
           <button
             onClick={() => setSlowSpeech((v) => !v)}
