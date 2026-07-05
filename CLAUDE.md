@@ -6,13 +6,15 @@
 
 ## Project orientation (in 30 seconds)
 
-A personal AI-driven Mandarin tutor. Conversational Q&A practice loop: AI asks a question in Mandarin, user answers via mic, Azure scores pronunciation/tone, Claude evaluates and either passes (turn flips, AI waits patiently for user to ask the next question) or drops into a tutor sub-loop. Solo-use. No accounts, no multi-tenant, no cloud DB.
+A personal AI-driven Mandarin tutor. Continuous conversation loop: the AI asks a question in Mandarin, the user answers via mic (hold **space**), the AI reacts and asks the next thing. A side-channel lets the user hold **E** to ask an English question ("how do I say water?"), and a "my words only" drill mode focuses on saved words. Solo-use. No accounts, no multi-tenant, no cloud DB.
+
+**Read `DevDoc.md` first — its "Current state" + "Getting started on a new machine" sections are the source of truth for how the app actually works today (it has drifted from the 2026-05-25 spec).**
 
 Always-loaded docs:
-- `DevDoc.md` — scope, decisions, open questions, icebox
-- `docs/superpowers/specs/2026-05-25-learn-chinese-design.md` — design spec (authoritative until updated)
+- `DevDoc.md` — current state, machine-setup/portability, session log, decisions, open questions, icebox
+- `docs/superpowers/specs/2026-05-25-learn-chinese-design.md` — original design spec (partly superseded — see DevDoc)
 
-Stack: Next.js 16 App Router + TypeScript + Tailwind + shadcn/ui. Azure Speech (pronunciation assessment + neural TTS) + Anthropic Claude (orchestrator). Decks as YAML in `/decks/`. Progress in localStorage.
+Stack: Next.js 16 App Router + TypeScript + Tailwind + shadcn/ui. **STT = OpenAI `gpt-4o-transcribe`; TTS = Azure Neural; orchestrator = Anthropic Claude Sonnet 5.** Decks as YAML in `/decks/`. Progress + saved words in localStorage. **Pronunciation scoring / the tutor sub-loop is currently inactive** (Azure scoring was dropped with the STT swap — see DevDoc Open questions).
 
 ---
 
@@ -62,13 +64,15 @@ When user says:
 
 ## Local dev workflow
 
-(To be filled in once the Next.js app is scaffolded.)
+**New machine?** See DevDoc.md → "Getting started on a new machine". Short version: `.env.local` is gitignored, so copy `.env.local.example` → `.env.local` and fill in `OPENAI_API_KEY` (STT), `AZURE_SPEECH_KEY` + `AZURE_SPEECH_REGION` (TTS), `ANTHROPIC_API_KEY` (orchestrator). Without a key the matching layer silently runs in mock mode.
 
 ```
-npm run dev       # local server
-npm run check     # typecheck + lint
-npm run visual    # Playwright visual QA (TBD)
+npm run dev       # local server (PORT=3001 npm run dev if 3000 is busy)
+npm run check     # tsc + eslint
+npm run test      # vitest unit tests
 ```
+
+Verify UI flows by driving a real headless Chromium (Playwright) and reading back the result / a screenshot — not by assuming HTTP 200 means working. Provider layers each have a mock fallback, so always confirm the real key path (e.g. `/api/transcribe` returns `400 audio required`, not `[mock transcript]`).
 
 ---
 
