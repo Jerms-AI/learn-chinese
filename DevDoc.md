@@ -75,6 +75,7 @@ The app is **built and working**. A session is a continuous conversation: the AI
 ## Open questions
 
 - **Pronunciation feedback / the tutor is gone.** It was Azure-scoring-driven and was removed with the STT swap. The state machine + `TutorPanel` still exist but nothing feeds them (`lastUserScore` is hardcoded `null`, `TutorPanel` isn't rendered). Whisper "auto-corrects" mispronunciations into the nearest real words, so it can't detect tone errors. To restore real feedback: **Azure Pronunciation Assessment** against a target phrase (the reactivated Azure resource supports it) — fits **drill / "repeat after me"** mode (which has a reference phrase) far better than open free-form chat. Decision deferred; user aware.
+  - **Parked candidate: `feat/tutor-mode` (commit `a42f5bb`, 2026-09-03).** A complete text-match tutor loop recovered from the stale `Learn_Chinese_OpenAI` worktree: 15s answer timer → AI-suggested phrase → repeat/judge (STT text match, no Azure scoring) → 2 fails escalates to a Haiku tip spoken in a bilingual two-voice Azure clip + slow playback. Spec: `docs/superpowers/specs/2026-06-12-tutor-mode-design.md`. Based on main@`3f7bfe0` (pre drill/ask-in-English), so `page.tsx` + mic files need hand re-integration; `lib/tutor/`, bilingual TTS, orchestrator prompts and state events port cleanly. Not integrated — pick up when tutor feedback is back in scope.
 
 ---
 
