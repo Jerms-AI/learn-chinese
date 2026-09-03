@@ -74,3 +74,13 @@ Format per entry: date · English → 汉字 · pinyin · notes/mnemonics · (an
 - User has already read Three-Body. Revised pick: Wild Swans + Waste Tide (陈楸帆); alts Ball Lightning,
   Supernova Era, Condor Heroes, Monkey.
 - Final reading list: Wild Swans, Waste Tide; then Condor Heroes, To Live, Monkey.
+- Condor Heroes = 4 English vols (A Hero Born → A Bond Undone → A Snake Lies Waiting → A Heart Divided).
+  Return of the Condor Heroes is the sequel. Start: A Hero Born.
+- Monkey = Waley's abridgement of 西游记 Xī Yóu Jì (Journey to the West, 吴承恩). Alts: Lovell "Monkey King"
+  (2021, modern), Anthony Yu 4-vol complete or "The Monkey and the Monk" abridged.
+- Connection: Black Myth: Wukong (game) is based on 西游记. 孙悟空 Sūn Wùkōng = 悟 awaken + 空 emptiness.
+  猴子 hóuzi monkey.
+- App insight: pop-culture hooks (games, films) are strong motivators for this user — consider tagging
+  vocab/decks with cultural references (Wukong, Three Kingdoms) for engagement.
+- Final purchase list: Waste Tide, To Live, Wild Swans, A Hero Born, Monkey King (Lovell), Invisible Planets
+  (contains Folding Beijing).

@@ -58,3 +58,6 @@ scratch/
 
 # next dev --experimental-https local certs
 certificates/
+
+# Vercel project link
+.vercel
