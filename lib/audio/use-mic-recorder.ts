@@ -7,6 +7,19 @@ export type MicRecorderOptions = {
   onStream?: (stream: MediaStream) => void;
 };
 
+/** MediaRecorder container preference. Chrome/Firefox/Android record
+ *  webm/opus; iOS Safari only supports audio/mp4 — passing "audio/webm" there
+ *  throws NotSupportedError and the mic silently never starts. Pure — exported
+ *  for tests. */
+export function pickRecorderMimeType(
+  isTypeSupported: ((t: string) => boolean) | undefined =
+    typeof MediaRecorder !== "undefined" ? MediaRecorder.isTypeSupported?.bind(MediaRecorder) : undefined,
+): string {
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+  if (!isTypeSupported) return "audio/webm";
+  return candidates.find((t) => isTypeSupported(t)) ?? "audio/webm";
+}
+
 export function useMicRecorder(opts?: MicRecorderOptions) {
   const [isRecording, setIsRecording] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -67,7 +80,8 @@ export function useMicRecorder(opts?: MicRecorderOptions) {
   const start = useCallback(async () => {
     const stream = await getStream();
     chunksRef.current = [];
-    const rec = new MediaRecorder(stream, { mimeType: "audio/webm" });
+    const mimeType = pickRecorderMimeType();
+    const rec = new MediaRecorder(stream, { mimeType });
     rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
     recorderRef.current = rec;
     rec.start();
@@ -80,7 +94,10 @@ export function useMicRecorder(opts?: MicRecorderOptions) {
       const rec = recorderRef.current;
       if (!rec) { resolve(new Blob([])); return; }
       rec.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        // Container type travels with the blob so the upload names the file
+        // correctly (.webm vs .mp4) for the STT provider.
+        const type = (rec.mimeType || "audio/webm").split(";")[0];
+        const blob = new Blob(chunksRef.current, { type });
         recorderRef.current = null;
         setIsRecording(false);
         resolve(blob);

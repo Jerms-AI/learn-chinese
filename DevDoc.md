@@ -33,6 +33,8 @@ The app is **built and working**. A session is a continuous conversation: the AI
 
 ---
 
+**Using it from your phone (same Wi-Fi):** phone browsers only allow the mic on `https://`, so run `npm run dev:https` (`scripts/dev-https.mjs`: generates a mkcert self-signed cert with the LAN IP as a SAN into gitignored `certificates/`, then starts Next bound to `0.0.0.0` with it; `PORT=3001` to change port, `--regen` after an IP change) and open the printed `https://<LAN-IP>:3000` on the phone. Accept the certificate warning once (Safari: "Show details → visit this website"; Chrome: "Advanced → proceed"). Hold-to-talk and hold-to-ask are pointer/touch buttons; iOS Safari records `audio/mp4` (negotiated in `pickRecorderMimeType`), which OpenAI STT accepts.
+
 ## Session log — 2026-07-04 (all on `main`, pushed)
 
 - **App "not working" fix:** the Azure→OpenAI STT migration never added `OPENAI_API_KEY` to `.env.local`, so transcription was mock-only. Added the key + listed it in `.env.local.example`.

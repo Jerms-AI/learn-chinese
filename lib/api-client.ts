@@ -32,7 +32,9 @@ export async function fetchTurn(args: {
 
 export async function postTranscribe(audio: Blob, lang: "zh" | "en" = "zh"): Promise<{ transcript: string }> {
   const form = new FormData();
-  form.append("audio", audio, "speech.webm");
+  // iOS Safari records audio/mp4; everything else webm. The extension is what
+  // OpenAI uses to sniff the container.
+  form.append("audio", audio, audio.type.includes("mp4") ? "speech.mp4" : "speech.webm");
   form.append("lang", lang);
   const res = await fetch("/api/transcribe", { method: "POST", body: form });
   if (!res.ok) throw new Error(`/api/transcribe ${res.status}`);

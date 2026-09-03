@@ -55,3 +55,6 @@ decks/raw/
 
 # Local dev scratchpad
 scratch/
+
+# next dev --experimental-https local certs
+certificates/
