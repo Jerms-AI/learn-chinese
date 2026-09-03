@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "audio required" }, { status: 400 });
   }
 
-  const webm = Buffer.from(await audioFile.arrayBuffer());
-  const transcript = await transcribeSpeech(webm, lang);
+  const audio = Buffer.from(await audioFile.arrayBuffer());
+  const transcript = await transcribeSpeech(audio, lang, audioFile.type || "audio/webm");
   return NextResponse.json({ transcript });
 }

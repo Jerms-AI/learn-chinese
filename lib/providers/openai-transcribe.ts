@@ -18,10 +18,17 @@ function getClient(): OpenAI {
 /** @param language ISO-639-1 hint for the STT model. "zh" for the user's
  *  Mandarin answers (default); "en" for the "ask in English" flow, where the
  *  user speaks an English question and a "zh" hint would garble it. */
-export async function transcribeSpeech(webm: Buffer, language: "zh" | "en" = "zh"): Promise<string> {
-  // OpenAI's SDK accepts a web-standard File. webm is one of the supported
-  // input formats so we can skip the ffmpeg→PCM transcode entirely.
-  const file = new File([new Uint8Array(webm)], "speech.webm", { type: "audio/webm" });
+export async function transcribeSpeech(
+  audio: Buffer,
+  language: "zh" | "en" = "zh",
+  mimeType: string = "audio/webm",
+): Promise<string> {
+  // OpenAI's SDK accepts a web-standard File. webm (desktop/Android) and mp4
+  // (iOS Safari) are both supported inputs, so no ffmpeg→PCM transcode needed.
+  const isMp4 = mimeType.includes("mp4");
+  const file = new File([new Uint8Array(audio)], isMp4 ? "speech.mp4" : "speech.webm", {
+    type: isMp4 ? "audio/mp4" : "audio/webm",
+  });
   const res = await getClient().audio.transcriptions.create({
     file,
     model: MODEL,

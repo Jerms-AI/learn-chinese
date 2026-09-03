@@ -49,6 +49,9 @@
 }
 
 html, body { height: 100%; }
+/* Phone: disable double-tap-to-zoom (pinch still works) so rapid mic presses
+   don't zoom the page. */
+body { touch-action: manipulation; }
 
 /* Tone color hints (used by pinyin renderer) */
 .tone-1 { color: #2563eb; }   /* high — blue */

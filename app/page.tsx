@@ -325,8 +325,8 @@ export default function Page() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-12 space-y-8">
-      <header className="flex items-baseline justify-between">
+    <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-12 space-y-8">
+      <header className="flex items-baseline justify-between flex-wrap gap-y-4">
         <div>
           <h1 className="font-serif text-3xl">
             学中文
@@ -346,7 +346,7 @@ export default function Page() {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <div
             className="flex flex-col items-start"
             title="How far the tutor may stray from your lesson — 0 stays strictly on-lesson, 3 is free conversation"
