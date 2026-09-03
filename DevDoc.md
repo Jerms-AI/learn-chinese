@@ -35,6 +35,13 @@ The app is **built and working**. A session is a continuous conversation: the AI
 
 **Using it from your phone (same Wi-Fi):** phone browsers only allow the mic on `https://`, so run `npm run dev:https` (`scripts/dev-https.mjs`: generates a mkcert self-signed cert with the LAN IP as a SAN into gitignored `certificates/`, then starts Next bound to `0.0.0.0` with it; `PORT=3001` to change port, `--regen` after an IP change) and open the printed `https://<LAN-IP>:3000` on the phone. Accept the certificate warning once (Safari: "Show details → visit this website"; Chrome: "Advanced → proceed"). Hold-to-talk and hold-to-ask are pointer/touch buttons; iOS Safari records `audio/mp4` (negotiated in `pickRecorderMimeType`), which OpenAI STT accepts.
 
+## Hosting (Vercel)
+
+- Project **`learn-chinese`** in the personal Vercel scope (`amd-emr-app` = "Jeremy's projects"), linked via `.vercel/` (gitignored). CLI: `vercel deploy` (preview) / `vercel deploy --prod`. Env vars (all 4 API keys + `APP_PASSCODE`) are set for production + preview; `vercel env pull` is **not** used — `.env.local` stays hand-managed.
+- **Passcode gate** (`proxy.ts` + `lib/auth/passcode.ts` + `/unlock`): solo app, no accounts. `APP_PASSCODE` set → every page/API needs the `lc_auth` cookie (sha256-derived, httpOnly, 1 year); pages redirect to `/unlock`, APIs return 401. Unset locally → gate off. Vercel's own "Vercel Authentication" deployment protection is **disabled** on the project (it would force a Vercel login on the phone).
+- `next.config.ts` `outputFileTracingIncludes` ships `decks/**` + `public/mocks/**` into the serverless functions (they're read via `fs` at request time and wouldn't be traced otherwise).
+- Progress/saved words remain per-device localStorage — phone and PC don't sync (fine solo; Supabase only if that changes).
+
 ## Session log — 2026-07-04 (all on `main`, pushed)
 
 - **App "not working" fix:** the Azure→OpenAI STT migration never added `OPENAI_API_KEY` to `.env.local`, so transcription was mock-only. Added the key + listed it in `.env.local.example`.
