@@ -16,7 +16,7 @@ class FakeMediaRecorder {
 }
 
 function makeFakeStream() {
-  const track = { stop: vi.fn(), readyState: "live" as string };
+  const track = { stop: vi.fn(), readyState: "live" as string, muted: false };
   return {
     track,
     stream: { getTracks: () => [track] },
@@ -63,6 +63,25 @@ describe("useMicRecorder", () => {
     await act(async () => { await result.current.start(); });
     await act(async () => { await result.current.stop(); });
     fake.track.readyState = "ended"; // e.g. user unplugged the mic
+    await act(async () => { await result.current.start(); });
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+  });
+
+  it("does NOT re-acquire just because the idle track reports muted (Chrome idle behavior)", async () => {
+    const { result } = renderHook(() => useMicRecorder());
+    await act(async () => { await result.current.start(); });
+    await act(async () => { await result.current.stop(); });
+    fake.track.muted = true; // Chrome marks idle tracks muted until audio flows
+    await act(async () => { await result.current.start(); });
+    expect(getUserMedia).toHaveBeenCalledTimes(1); // warm stream kept
+  });
+
+  it("reset() releases the stream so the next start re-acquires fresh", async () => {
+    const { result } = renderHook(() => useMicRecorder());
+    await act(async () => { await result.current.start(); });
+    await act(async () => { await result.current.stop(); });
+    act(() => { result.current.reset(); });
+    expect(fake.track.stop).toHaveBeenCalled(); // stale stream released
     await act(async () => { await result.current.start(); });
     expect(getUserMedia).toHaveBeenCalledTimes(2);
   });

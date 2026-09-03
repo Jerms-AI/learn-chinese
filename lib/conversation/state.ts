@@ -6,7 +6,10 @@ export type Mode =
   | "awaiting-user-answer"
   | "awaiting-user-question"
   | "user-speaking"
-  | "tutor";
+  | "tutor"            // legacy scripted-scoring tutor (Azure era)
+  | "tutor-prompting"  // timed out; AI fetching/speaking the suggested answer, mic paused
+  | "tutor-listening"  // learner repeating the target phrase
+  | "tutor-deep";      // escalated: slow audio + tips
 
 export type Speaker = "ai" | "user";
 
@@ -84,6 +87,15 @@ export type State = {
    * card alongside Claude's reply so the user can see what was heard. Cleared
    * when the next scripted Q lands. */
   lastUserFreeForm?: string;
+  /** Active tutor practice loop (tutor-listening / tutor-deep modes only).
+   * attempts holds the STT transcripts of every judged try — the deep-mode tip
+   * prompt reads them to target what the learner is actually getting wrong. */
+  tutor?: {
+    target: Phrase;
+    successes: number;
+    consecutiveFails: number;
+    attempts: string[];
+  };
 };
 
 export type Event =
@@ -95,6 +107,11 @@ export type Event =
   | { type: "AI_RESPONDED_FREEFORM"; utterance: Phrase }
   | { type: "AI_CONFIRMED" }
   | { type: "TUTOR_RESOLVED" }
+  | { type: "TUTOR_TIMEOUT" }
+  | { type: "TUTOR_SUGGESTED"; target: Phrase }
+  | { type: "TUTOR_ATTEMPT"; transcript: string; pass: boolean }
+  | { type: "TUTOR_DEEPEN" }
+  | { type: "TUTOR_EXIT"; reason: "success" | "skip" }
   | { type: "RESET" }
   | { type: "REHYDRATE"; state: State };
 
@@ -252,10 +269,48 @@ export function applyEvent(s: State, e: Event): State {
     case "TUTOR_RESOLVED":
       return { ...s, mode: "awaiting-user-question", nextSpeaker: "user" };
 
+    case "TUTOR_TIMEOUT":
+      // Only meaningful while waiting on the user — ignore stray timer fires.
+      if (s.mode !== "awaiting-user-question") return s;
+      return { ...s, mode: "tutor-prompting" };
+
+    case "TUTOR_SUGGESTED":
+      return {
+        ...s,
+        mode: "tutor-listening",
+        tutor: { target: e.target, successes: 0, consecutiveFails: 0, attempts: [] },
+      };
+
+    case "TUTOR_ATTEMPT": {
+      if (!s.tutor) return s;
+      return {
+        ...s,
+        tutor: {
+          ...s.tutor,
+          successes: s.tutor.successes + (e.pass ? 1 : 0),
+          consecutiveFails: e.pass ? 0 : s.tutor.consecutiveFails + 1,
+          attempts: [...s.tutor.attempts, e.transcript],
+        },
+      };
+    }
+
+    case "TUTOR_DEEPEN":
+      return { ...s, mode: "tutor-deep" };
+
+    case "TUTOR_EXIT":
+      return { ...s, mode: "awaiting-user-question", nextSpeaker: "user", tutor: undefined };
+
     case "RESET":
       return initialState();
 
-    case "REHYDRATE":
+    case "REHYDRATE": {
+      // Never resume mid-tutor after a reload — the practice loop is transient
+      // (timers, fetched suggestions). Land back in normal conversation.
+      const tutorModes: Mode[] = ["tutor-prompting", "tutor-listening", "tutor-deep"];
+      if (tutorModes.includes(e.state.mode)) {
+        return { ...e.state, mode: "awaiting-user-question", tutor: undefined };
+      }
       return e.state;
+    }
   }
 }

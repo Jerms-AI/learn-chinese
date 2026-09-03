@@ -63,3 +63,9 @@ html, body { height: 100%; }
     color: var(--color-ink);
   }
 }
+
+/* TimerBar fill — restarted by keyed remount on each new question. */
+@keyframes timerbar-fill {
+  from { width: 0%; }
+  to { width: 100%; }
+}

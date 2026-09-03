@@ -17,5 +17,8 @@ export async function POST(req: NextRequest) {
 
   const webm = Buffer.from(await audioFile.arrayBuffer());
   const transcript = await transcribeMandarin(webm);
+  // Compact diagnostic — twice now the symptom "nothing transcribes" needed
+  // exactly this to localize (clipped blobs once, muted warm stream once).
+  console.log(`[transcribe] ${webm.length}B -> ${JSON.stringify(transcript.slice(0, 40))}`);
   return NextResponse.json({ transcript });
 }

@@ -1,50 +1,41 @@
 "use client";
-import { useEffect, useState } from "react";
-import { MicButton } from "./MicButton";
-import { postTts } from "@/lib/api-client";
-import type { Score } from "@/lib/conversation/state";
+import type { Phrase } from "@/lib/decks/schema";
+import { TonedPinyin } from "./TonedPinyin";
 
-export type TutorPayload = {
-  targetWord: string;
-  diagnosis: string;
-  referenceAudioUrl: string;
-  retryPrompt: string;
-};
-
-function attemptColor(n: number, threshold: number): string {
-  if (n >= threshold) return "text-green-700";
-  if (n >= threshold - 20) return "text-amber-600";
-  return "text-red-600";
-}
-
+/**
+ * Tutor practice surface: the target phrase to repeat, progress dots toward
+ * the required successes, replay buttons (slow variant in deep mode), and the
+ * coach's tip when escalated. The main MicButton stays the one and only mic —
+ * this panel is display + controls, not capture.
+ */
 export function TutorPanel({
-  payload,
-  attemptScore,
-  passThreshold = 65,
-  onRetry,
+  target,
+  deep,
+  successes,
+  required,
+  tip,
+  onReplay,
   onSkip,
+  hidePinyin = false,
+  hideEnglish = false,
 }: {
-  payload: TutorPayload;
-  attemptScore?: Score | null;
-  passThreshold?: number;
-  onRetry: (blob: Blob) => void;
+  target: Phrase;
+  /** Deep mode: slow replay button + tip visible. */
+  deep: boolean;
+  successes: number;
+  required: number;
+  tip: string | null;
+  onReplay: (slow: boolean) => void;
   onSkip: () => void;
+  /** Mirror the conversation card's display-layer toggles. */
+  hidePinyin?: boolean;
+  hideEnglish?: boolean;
 }) {
-  const [refUrl, setRefUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    postTts(payload.targetWord)
-      .then((url) => { if (!cancelled) setRefUrl(url); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [payload.targetWord]);
-
   return (
     <div className="rounded-2xl bg-card p-8 shadow-md border-l-4 border-terracotta space-y-5">
       <div className="flex items-center justify-between">
         <span className="text-xs uppercase tracking-widest text-terracotta font-medium">
-          ◆ Tutor mode — let&apos;s drill this
+          ◆ Tutor mode — try saying this
         </span>
         <button onClick={onSkip} className="text-xs text-ink-soft underline hover:text-ink">
           skip and move on
@@ -52,34 +43,52 @@ export function TutorPanel({
       </div>
 
       <div className="text-center">
-        <div className="font-serif text-7xl tracking-wide">{payload.targetWord}</div>
-        <div className="mt-2 text-xs text-ink-soft">
-          aim for <span className="font-medium">{passThreshold}+</span> to move on
-        </div>
+        <div className="font-serif text-6xl tracking-wide">{target.hanzi}</div>
+        {!hidePinyin && (
+          <div className="mt-3 text-xl">
+            <TonedPinyin text={target.pinyin} />
+          </div>
+        )}
+        {!hideEnglish && <div className="mt-1 text-ink-soft">{target.english}</div>}
       </div>
 
-      <p className="text-sm text-ink-soft leading-relaxed">{payload.diagnosis}</p>
+      <div className="flex items-center justify-center gap-3">
+        <span
+          className="inline-flex items-center gap-1.5"
+          aria-label={`${successes} of ${required} successful repetitions`}
+        >
+          {Array.from({ length: required }, (_, i) => (
+            <span
+              key={i}
+              className={`inline-block w-3 h-3 rounded-full ${
+                i < successes ? "bg-emerald-600" : "bg-transparent border border-ink-soft/30"
+              }`}
+            />
+          ))}
+        </span>
+        <span className="text-xs text-ink-soft">say it {required} times</span>
+      </div>
 
-      {refUrl ? (
-        <div className="space-y-1">
-          <div className="text-xs text-ink-soft">listen ↓</div>
-          <audio controls src={refUrl} className="w-full" autoPlay />
-        </div>
-      ) : (
-        <div className="text-xs text-ink-soft text-center">loading reference audio…</div>
+      <div className="flex items-center justify-center gap-4">
+        <button
+          onClick={() => onReplay(false)}
+          className="text-sm rounded-full border px-4 py-1.5 hover:bg-parchment transition"
+        >
+          🔊 listen
+        </button>
+        {deep && (
+          <button
+            onClick={() => onReplay(true)}
+            className="text-sm rounded-full border px-4 py-1.5 hover:bg-parchment transition"
+          >
+            🐢 slowly
+          </button>
+        )}
+      </div>
+
+      {deep && tip && (
+        <p className="text-sm text-ink-soft leading-relaxed border-t pt-4">{tip}</p>
       )}
-
-      <div className="border-t pt-4 space-y-3">
-        <div className="flex items-center justify-between text-xs text-ink-soft">
-          <span>now try it →</span>
-          {attemptScore && (
-            <span className={`font-medium ${attemptColor(attemptScore.accuracy, passThreshold)}`}>
-              last attempt: {attemptScore.accuracy} {attemptScore.accuracy >= passThreshold ? "✓" : ""}
-            </span>
-          )}
-        </div>
-        <MicButton onAudio={onRetry} />
-      </div>
     </div>
   );
 }

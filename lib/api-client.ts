@@ -17,6 +17,12 @@ export async function fetchTurn(args: {
   pairUsage?: Record<string, { count: number; lastTurn: number }>;
   historyTurnCount?: number;
   userFreeFormTranscript?: string;
+  /** For tutor metaIntents ("tutor-suggest" / "tutor-tip"). */
+  tutorContext?: {
+    question?: { hanzi: string; pinyin: string; english: string };
+    target?: { hanzi: string; pinyin: string; english: string };
+    attempts?: string[];
+  };
 }): Promise<OrchestratorOutput> {
   const res = await fetch("/api/turn", {
     method: "POST",
@@ -35,11 +41,15 @@ export async function postTranscribe(audio: Blob): Promise<{ transcript: string 
   return res.json();
 }
 
-export async function postTts(text: string, rate?: number): Promise<string> {
+export async function postTts(
+  text: string,
+  rate?: number,
+  opts?: { bilingual?: boolean },
+): Promise<string> {
   const res = await fetch("/api/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, rate }),
+    body: JSON.stringify({ text, rate, bilingual: opts?.bilingual }),
   });
   if (!res.ok) throw new Error(`/api/tts ${res.status}`);
   const buf = await res.arrayBuffer();

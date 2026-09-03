@@ -28,6 +28,15 @@ export type OrchestratorInput = {
   /** When set, the user just spoke free-form Mandarin (not a scripted answer).
    * The orchestrator should produce a natural response AND choose the next scripted Q. */
   userFreeFormTranscript?: string;
+  /** Context for tutor metaIntents ("tutor-suggest" / "tutor-tip"). */
+  tutorContext?: {
+    /** The AI question the learner couldn't answer (tutor-suggest). */
+    question?: Phrase;
+    /** The phrase being practiced (tutor-tip). */
+    target?: Phrase;
+    /** STT transcripts of the failed attempts so the tip targets the actual miss. */
+    attempts?: string[];
+  };
   mock?: boolean;
 };
 
@@ -63,6 +72,12 @@ export type OrchestratorOutput = {
   };
   /** Friendly nudge to display when routeTo is "retry-full". */
   retryHint?: string;
+  /** metaIntent "tutor-suggest": the phrase the tutor asks the learner to repeat. */
+  tutorSuggestion?: Phrase;
+  /** metaIntent "tutor-tip": one human-style tip targeting the learner's misses. */
+  tutorTip?: string;
+  /** TTS-ready variant of tutorTip (Chinese in hanzi so the voice can read it). */
+  tutorTipSpeak?: string;
 };
 
 const PASS_THRESHOLD = 80;        // full-sentence attempts
@@ -201,6 +216,92 @@ export function parseConversationalTurn(rawText: string, userTranscript: string 
   return { userAugmented, utterance, usedPairIds };
 }
 
+function stripFences(raw: string): string {
+  return raw.replace(/```json\s*/g, "").replace(/```\s*$/g, "").trim();
+}
+
+/** Parses the tutor-suggest reply. Pure — exported for tests. Throws on
+ * malformed output; the caller catches and uses a fallback phrase. */
+export function parseTutorSuggestion(rawText: string): Phrase {
+  const parsed = JSON.parse(stripFences(rawText)) as { suggestion?: { hanzi?: string; pinyin?: string; english?: string } };
+  const s = parsed.suggestion;
+  if (!s?.hanzi || !s?.pinyin || !s?.english) throw new Error("incomplete tutor suggestion");
+  return { hanzi: s.hanzi, pinyin: s.pinyin, english: s.english };
+}
+
+/** Parses the tutor-tip reply. Pure — exported for tests. `speak` is the
+ * TTS-ready variant (Chinese in hanzi, not pinyin); falls back to `tip`. */
+export function parseTutorTip(rawText: string): { tip: string; speak: string } {
+  const parsed = JSON.parse(stripFences(rawText)) as { tip?: string; speak?: string };
+  if (!parsed.tip) throw new Error("missing tutor tip");
+  return { tip: parsed.tip, speak: parsed.speak || parsed.tip };
+}
+
+/** Tutor prompt 1 — isolated from the conversation prompt so each can be tuned
+ * independently: given the question the learner couldn't answer, produce ONE
+ * short, natural beginner answer to practice. */
+async function suggestResponse(question: Phrase, chapterPool: Pair[]): Promise<Phrase> {
+  const fallback: Phrase = { hanzi: "我不明白", pinyin: "wǒ bù míngbai", english: "I don't understand" };
+  try {
+    const client = getAnthropic();
+    const resp = await client.messages.create({
+      model: CLAUDE_HAIKU_MODEL,
+      max_tokens: 200,
+      system: `You are a Mandarin tutor. The learner was asked a question and couldn't answer in time. Give ONE short, natural answer a beginner could realistically say — a phrase, not a paragraph. Prefer vocabulary from chapterPool. Simplified characters.
+
+Output ONLY this JSON (no markdown):
+{ "suggestion": { "hanzi": "...", "pinyin": "...", "english": "..." } }`,
+      messages: [{
+        role: "user",
+        content: JSON.stringify({
+          question,
+          chapterPool: chapterPool.map((p) => ({ q: p.q, a: p.a, statement: p.statement })),
+        }),
+      }],
+    });
+    const textBlock = resp.content.find((b) => b.type === "text") as { type: "text"; text: string } | undefined;
+    return parseTutorSuggestion(textBlock?.text ?? "");
+  } catch {
+    return fallback;
+  }
+}
+
+/** Tutor prompt 2 — one human-style tip for a learner stuck on a phrase.
+ * Sees what STT heard on the failed attempts so it can target the real miss. */
+async function tutorTip(target: Phrase, attempts: string[]): Promise<{ tip: string; speak: string }> {
+  const fallback = {
+    tip: `Listen once more, then try it slowly — one word at a time: ${target.pinyin}`,
+    speak: `Listen once more, then try it slowly — one word at a time: ${target.hanzi}`,
+  };
+  try {
+    const client = getAnthropic();
+    const resp = await client.messages.create({
+      model: CLAUDE_HAIKU_MODEL,
+      max_tokens: 400,
+      system: `You are a warm, human Mandarin tutor helping a stuck beginner say one phrase. failedAttempts is what a speech recognizer heard on their tries — diagnose the likely miss and give ONE short tip (2-3 sentences max, in English). Vary your style; pick whichever fits best:
+- break the phrase down word by word with pinyin
+- an English sound-alike for the hardest syllable
+- a cultural usage note ("in China people usually answer like..., try that")
+Be encouraging, never academic.
+
+Return TWO versions of the same tip:
+- "tip": for display — Chinese written as pinyin with tone marks
+- "speak": for text-to-speech by a bilingual zh-CN voice. The English coaching stays in ENGLISH, word for word — do NOT translate it to Chinese. Only convert the Chinese examples from pinyin to hanzi (the voice can't read pinyin). Example: tip "Say 'yī diǎn' slowly" → speak "Say 一点 slowly"
+
+Output ONLY this JSON (no markdown):
+{ "tip": "...", "speak": "..." }`,
+      messages: [{
+        role: "user",
+        content: JSON.stringify({ target, failedAttempts: attempts }),
+      }],
+    });
+    const textBlock = resp.content.find((b) => b.type === "text") as { type: "text"; text: string } | undefined;
+    return parseTutorTip(textBlock?.text ?? "");
+  } catch {
+    return fallback;
+  }
+}
+
 /** Generates one conversational AI turn. Used for both the initial opener
  * (no user transcript yet) and follow-up replies (user transcript present).
  * The chapter pool informs Claude's vocab but is not a strict script — Claude
@@ -284,6 +385,27 @@ Output ONLY this JSON (no markdown):
 
 export async function runOrchestrator(input: OrchestratorInput): Promise<OrchestratorOutput> {
   const useMock = input.mock || !process.env.ANTHROPIC_API_KEY;
+
+  // Tutor metaIntents: isolated single-purpose calls, no conversation turn.
+  if (input.metaIntent === "tutor-suggest") {
+    const question = input.tutorContext?.question ?? { hanzi: "", pinyin: "", english: "" };
+    if (useMock) {
+      return { speakerNext: "user", routeTo: "conversation", tutorSuggestion: { hanzi: "我很好", pinyin: "wǒ hěn hǎo", english: "I'm fine" } };
+    }
+    const decks = await loadAllDecks(path.join(process.cwd(), "decks"));
+    const filtered = input.activeDeckIds.length > 0 ? decks.filter((d) => input.activeDeckIds.includes(d.deck.id)) : decks;
+    const tutorSuggestion = await suggestResponse(question, filtered.flatMap((d) => d.pairs));
+    return { speakerNext: "user", routeTo: "conversation", tutorSuggestion };
+  }
+  if (input.metaIntent === "tutor-tip") {
+    const target = input.tutorContext?.target ?? { hanzi: "", pinyin: "", english: "" };
+    if (useMock) {
+      return { speakerNext: "user", routeTo: "conversation", tutorTip: "Try it word by word.", tutorTipSpeak: "Try it word by word." };
+    }
+    const { tip, speak } = await tutorTip(target, input.tutorContext?.attempts ?? []);
+    return { speakerNext: "user", routeTo: "conversation", tutorTip: tip, tutorTipSpeak: speak };
+  }
+
   if (useMock) return mockOrchestrator(input);
 
   // Build the active-chapter pool (filtered by active deck selection). No slice

@@ -14,12 +14,25 @@ export function useMicRecorder() {
   // every press, release only on unmount.
   const getStream = useCallback(async (): Promise<MediaStream> => {
     const existing = streamRef.current;
+    // NOTE: do not gate reuse on track.muted — Chrome reports idle tracks as
+    // muted until audio flows, so that check forces a cold re-acquire on every
+    // press (clipping short recordings). Silent-stream recovery is handled by
+    // reset() instead, called when a transcription comes back empty.
     if (existing && existing.getTracks().some((t) => t.readyState === "live")) {
       return existing;
     }
+    existing?.getTracks().forEach((t) => t.stop());
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     streamRef.current = stream;
     return stream;
+  }, []);
+
+  /** Drop the cached stream so the next press re-acquires a fresh mic. Called
+   * when recorded audio turns out to be silent (empty transcription) — the
+   * track can go quiet without ever leaving the "live" state. */
+  const reset = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
   }, []);
 
   const start = useCallback(async () => {
@@ -55,5 +68,5 @@ export function useMicRecorder() {
     };
   }, []);
 
-  return { isRecording, start, stop };
+  return { isRecording, start, stop, reset };
 }

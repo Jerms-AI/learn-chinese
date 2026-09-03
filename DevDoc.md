@@ -74,3 +74,4 @@ Features deliberately deferred. Do not build unless explicitly promoted into sco
 - Deck sharing between users
 - Public hosting on Vercel (later, if mobile becomes important)
 - Tone diagram visualization beyond a basic 4-tone reference (start simple)
+- App-behavior observability dashboard — insight into how the conversation engine is actually functioning (which mode the AI is in, which rules fired: uploaded-lesson vocab adherence, organic return-to-lesson after off-script responses, dialogue randomization). "Dials" to turn different aspects of conversation behavior up/down for tuning subtleties and nuances.

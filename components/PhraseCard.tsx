@@ -1,22 +1,53 @@
 "use client";
-import { Eye, EyeOff } from "lucide-react";
 import type { Phrase } from "@/lib/decks/schema";
 import { TonedPinyin } from "./TonedPinyin";
+
+/** Chip toggle for one display layer (pinyin / English). Dimmed +
+ * struck-through when that layer is hidden. */
+function LayerToggle({
+  label,
+  hidden,
+  onToggle,
+  what,
+}: {
+  label: string;
+  hidden: boolean;
+  onToggle: () => void;
+  what: string;
+}) {
+  return (
+    <button
+      aria-label={hidden ? `Show ${what}` : `Hide ${what}`}
+      title={hidden ? `Show ${what}` : `Hide ${what}`}
+      onClick={onToggle}
+      className={`text-[11px] px-2 py-1 rounded-full border transition ${
+        hidden
+          ? "text-ink-soft/40 border-ink-soft/15 line-through"
+          : "text-ink-soft border-ink-soft/30 hover:bg-parchment hover:text-ink"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
 
 export function PhraseCard({
   phrase,
   isNew = false,
-  hideTranslations = false,
-  onToggleTranslations,
+  hidePinyin = false,
+  hideEnglish = false,
+  onTogglePinyin,
+  onToggleEnglish,
   onReplay,
 }: {
   phrase: Phrase;
   /** True the very first time this phrase is shown to the user. */
   isNew?: boolean;
-  /** When true, hides pinyin + English so only hanzi shows. */
-  hideTranslations?: boolean;
-  /** Toggle handler for the eye icon. */
-  onToggleTranslations?: () => void;
+  /** Independent display layers — hide pinyin / English separately. */
+  hidePinyin?: boolean;
+  hideEnglish?: boolean;
+  onTogglePinyin?: () => void;
+  onToggleEnglish?: () => void;
   onReplay?: () => void;
 }) {
   return (
@@ -27,28 +58,22 @@ export function PhraseCard({
             ✨ new
           </span>
         )}
-        {onToggleTranslations && (
-          <button
-            aria-label={hideTranslations ? "Show pinyin and English" : "Hide pinyin and English"}
-            title={hideTranslations ? "Show pinyin & English" : "Hide pinyin & English (hanzi only)"}
-            onClick={onToggleTranslations}
-            className="inline-flex items-center justify-center rounded-full p-1.5 text-ink-soft hover:bg-parchment hover:text-ink transition"
-          >
-            {hideTranslations ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
+        {onTogglePinyin && (
+          <LayerToggle label="pīn" hidden={hidePinyin} onToggle={onTogglePinyin} what="pinyin" />
+        )}
+        {onToggleEnglish && (
+          <LayerToggle label="EN" hidden={hideEnglish} onToggle={onToggleEnglish} what="English" />
         )}
       </div>
 
       <div className="text-center">
         <div className="font-serif text-6xl leading-tight tracking-wide">{phrase.hanzi}</div>
-        {!hideTranslations && (
-          <>
-            <div className="mt-3 text-xl">
-              <TonedPinyin text={phrase.pinyin} />
-            </div>
-            <div className="mt-1 text-ink-soft">{phrase.english}</div>
-          </>
+        {!hidePinyin && (
+          <div className="mt-3 text-xl">
+            <TonedPinyin text={phrase.pinyin} />
+          </div>
         )}
+        {!hideEnglish && <div className="mt-1 text-ink-soft">{phrase.english}</div>}
         {onReplay && (
           <button
             aria-label="Replay phrase audio"

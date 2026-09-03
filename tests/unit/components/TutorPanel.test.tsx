@@ -1,25 +1,41 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { TutorPanel } from "@/components/TutorPanel";
 
-describe("<TutorPanel>", () => {
-  const payload = {
-    targetWord: "你",
-    diagnosis: "Your tone slipped from rising to dipping. Try again.",
-    referenceAudioUrl: "/mocks/silence.mp3",
-    retryPrompt: "你",
-  };
+const TARGET = { hanzi: "一点", pinyin: "yī diǎn", english: "one o'clock" };
 
-  it("shows the target word and diagnosis", () => {
-    render(<TutorPanel payload={payload} onRetry={() => {}} onSkip={() => {}} />);
-    expect(screen.getByText("你")).toBeInTheDocument();
-    expect(screen.getByText(/tone slipped/i)).toBeInTheDocument();
+describe("<TutorPanel>", () => {
+  it("shows the target phrase: hanzi, pinyin, english", () => {
+    render(<TutorPanel target={TARGET} deep={false} successes={0} required={2} tip={null} onReplay={() => {}} onSkip={() => {}} />);
+    expect(screen.getByText("一点")).toBeInTheDocument();
+    expect(screen.getByText("one o'clock")).toBeInTheDocument();
   });
 
-  it("calls onSkip when 'skip' is clicked", () => {
+  it("shows progress dots toward the required successes", () => {
+    render(<TutorPanel target={TARGET} deep={false} successes={1} required={2} tip={null} onReplay={() => {}} onSkip={() => {}} />);
+    expect(screen.getByLabelText("1 of 2 successful repetitions")).toBeInTheDocument();
+  });
+
+  it("hides slow replay and tip outside deep mode", () => {
+    render(<TutorPanel target={TARGET} deep={false} successes={0} required={2} tip={"unused"} onReplay={() => {}} onSkip={() => {}} />);
+    expect(screen.queryByText(/slowly/)).toBeNull();
+    expect(screen.queryByText("unused")).toBeNull();
+  });
+
+  it("deep mode: tip visible, slow replay calls onReplay(true)", () => {
+    const onReplay = vi.fn();
+    render(<TutorPanel target={TARGET} deep successes={0} required={2} tip={"Think 'dee-ahn'."} onReplay={onReplay} onSkip={() => {}} />);
+    expect(screen.getByText("Think 'dee-ahn'.")).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/slowly/));
+    expect(onReplay).toHaveBeenCalledWith(true);
+    fireEvent.click(screen.getByText(/listen/));
+    expect(onReplay).toHaveBeenCalledWith(false);
+  });
+
+  it("skip link fires onSkip", () => {
     const onSkip = vi.fn();
-    render(<TutorPanel payload={payload} onRetry={() => {}} onSkip={onSkip} />);
-    screen.getByRole("button", { name: /skip/i }).click();
+    render(<TutorPanel target={TARGET} deep={false} successes={0} required={2} tip={null} onReplay={() => {}} onSkip={onSkip} />);
+    fireEvent.click(screen.getByText("skip and move on"));
     expect(onSkip).toHaveBeenCalled();
   });
 });

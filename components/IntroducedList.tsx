@@ -31,13 +31,16 @@ export function IntroducedList({
   phraseLibrary,
   mastery,
   currentPairId,
-  hideTranslations = false,
+  hidePinyin = false,
+  hideEnglish = false,
 }: {
   introducedIds: string[];
   phraseLibrary: Record<string, LibraryEntry>;
   mastery: Record<string, Mastery>;
   currentPairId?: string;
-  hideTranslations?: boolean;
+  /** Independent display layers — mirror the conversation card's toggles. */
+  hidePinyin?: boolean;
+  hideEnglish?: boolean;
 }) {
   return (
     // The card stretches with the grid row, so its bottom edge always meets
@@ -85,15 +88,15 @@ export function IntroducedList({
                     <div className="font-serif text-lg leading-snug break-words">
                       {entry.prompt.hanzi}
                     </div>
-                    {!hideTranslations && (
-                      <>
-                        <div className="text-xs text-ink-soft/90 mt-0.5 break-words">
-                          <TonedPinyin text={entry.prompt.pinyin} />
-                        </div>
-                        <div className="text-xs text-ink-soft/80 break-words">
-                          {entry.prompt.english}
-                        </div>
-                      </>
+                    {!hidePinyin && (
+                      <div className="text-xs text-ink-soft/90 mt-0.5 break-words">
+                        <TonedPinyin text={entry.prompt.pinyin} />
+                      </div>
+                    )}
+                    {!hideEnglish && (
+                      <div className="text-xs text-ink-soft/80 break-words">
+                        {entry.prompt.english}
+                      </div>
                     )}
                   </div>
                   {entry.userResponse && (
@@ -102,17 +105,15 @@ export function IntroducedList({
                       <div className="font-serif text-base leading-snug break-words">
                         {entry.userResponse.hanzi}
                       </div>
-                      {!hideTranslations && (
-                        <>
-                          <div className="text-xs text-ink-soft/90 mt-0.5 break-words">
-                            <TonedPinyin text={toPinyin(entry.userResponse.hanzi, { toneType: "symbol", type: "string" })} />
-                          </div>
-                          {entry.userResponse.english && (
-                            <div className="text-xs text-ink-soft/80 break-words">
-                              {entry.userResponse.english}
-                            </div>
-                          )}
-                        </>
+                      {!hidePinyin && (
+                        <div className="text-xs text-ink-soft/90 mt-0.5 break-words">
+                          <TonedPinyin text={toPinyin(entry.userResponse.hanzi, { toneType: "symbol", type: "string" })} />
+                        </div>
+                      )}
+                      {!hideEnglish && entry.userResponse.english && (
+                        <div className="text-xs text-ink-soft/80 break-words">
+                          {entry.userResponse.english}
+                        </div>
                       )}
                     </div>
                   )}
@@ -121,15 +122,15 @@ export function IntroducedList({
                       <div className="font-serif text-base leading-snug break-words">
                         {entry.response!.hanzi}
                       </div>
-                      {!hideTranslations && (
-                        <>
-                          <div className="text-xs text-ink-soft/90 mt-0.5 break-words">
-                            <TonedPinyin text={entry.response!.pinyin} />
-                          </div>
-                          <div className="text-xs text-ink-soft/80 break-words">
-                            {entry.response!.english}
-                          </div>
-                        </>
+                      {!hidePinyin && (
+                        <div className="text-xs text-ink-soft/90 mt-0.5 break-words">
+                          <TonedPinyin text={entry.response!.pinyin} />
+                        </div>
+                      )}
+                      {!hideEnglish && (
+                        <div className="text-xs text-ink-soft/80 break-words">
+                          {entry.response!.english}
+                        </div>
                       )}
                     </div>
                   )}
