@@ -52,7 +52,7 @@ export function TutorPanel({
       </div>
 
       <div className="text-center">
-        <div className="font-serif text-7xl tracking-wide">{payload.targetWord}</div>
+        <div className="font-serif text-hanzi-lg tracking-wide">{payload.targetWord}</div>
         <div className="mt-2 text-xs text-ink-soft">
           aim for <span className="font-medium">{passThreshold}+</span> to move on
         </div>

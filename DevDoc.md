@@ -42,6 +42,11 @@ The app is **built and working**. A session is a continuous conversation: the AI
 - `next.config.ts` `outputFileTracingIncludes` ships `decks/**` + `public/mocks/**` into the serverless functions (they're read via `fs` at request time and wouldn't be traced otherwise).
 - Progress/saved words remain per-device localStorage — phone and PC don't sync (fine solo; Supabase only if that changes).
 
+## Mobile notes
+
+- **Audio after the first turn (iOS autoplay):** Safari only lets media start inside a tap. "Start" is a tap, so question 1 plays; later questions arrive after STT/LLM/TTS fetches and a fresh `new Audio()` is silently blocked. Fix: one shared `<audio>` element (`lib/audio/player.ts`) unlocked with a silent WAV on the first gesture and reused for every phrase, plus the Web Audio context is resumed on every pointerdown/keydown (the player is routed through it for the visualizer — a suspended context = silence). Chromium can't reproduce the iOS rule (its activation is per-page), so this is verified by pattern, not emulation — confirm on a real phone.
+- **Hanzi sizing:** `text-hanzi` / `text-hanzi-lg` utilities in `globals.css` (`clamp()` on viewport width: ~36px phone → 60px desktop). Use these instead of fixed `text-6xl`.
+
 ## Session log — 2026-07-04 (all on `main`, pushed)
 
 - **App "not working" fix:** the Azure→OpenAI STT migration never added `OPENAI_API_KEY` to `.env.local`, so transcription was mock-only. Added the key + listed it in `.env.local.example`.

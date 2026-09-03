@@ -9,6 +9,7 @@ import { applyEvent, initialState } from "@/lib/conversation/state";
 import { saveState, loadState, clearState } from "@/lib/conversation/persistence";
 import { fetchTurn, postTranscribe, postTts, postAsk, type AskAnswer } from "@/lib/api-client";
 import { MIN_SPEECH_BYTES, containsHanzi } from "@/lib/audio/speech-guards";
+import { installUnlockOnGesture, playOnPlayer } from "@/lib/audio/player";
 import { VoiceVisualizer } from "@/components/VoiceVisualizer";
 import { deriveVisualizerState } from "@/lib/visualizer/state-map";
 import {
@@ -137,23 +138,30 @@ export default function Page() {
     }
   }, [drillMyWords]);
 
+  // Mobile autoplay policy: the shared player element must be unlocked inside
+  // a user gesture before later (post-fetch) playback is allowed. Also resume
+  // the Web Audio context on that gesture — the player is routed through it,
+  // so a suspended context means silence even when play() succeeds.
+  useEffect(() => {
+    const removeUnlock = installUnlockOnGesture();
+    const resume = () => resumeAudio();
+    window.addEventListener("pointerdown", resume);
+    window.addEventListener("keydown", resume);
+    return () => {
+      removeUnlock();
+      window.removeEventListener("pointerdown", resume);
+      window.removeEventListener("keydown", resume);
+    };
+  }, []);
+
+  /** Play a TTS clip on the shared element; resolves when playback finishes
+   * (not on start — otherwise the next clip would overlap this one). */
   async function playAudio(url: string) {
-    return new Promise<void>((resolve) => {
-      const audio = new Audio(url);
+    await playOnPlayer(url, {
       // Route through the shared analyser so the visualizer reacts to the AI's
       // voice, then mark the speaking state for its duration.
-      routeElement(audio);
-      setSpeaking(true);
-      const finish = () => {
-        unrouteElement(audio);
-        setSpeaking(false);
-        resolve();
-      };
-      // Resolve only when playback finishes — audio.play() alone resolves on
-      // start, which would let the next audio overlap this one.
-      audio.onended = finish;
-      audio.onerror = finish;
-      audio.play().catch(finish);
+      onStart: (el) => { routeElement(el); setSpeaking(true); },
+      onFinish: (el) => { unrouteElement(el); setSpeaking(false); },
     });
   }
 
@@ -463,7 +471,7 @@ export default function Page() {
 
           {userFreeFormPhrase && (
             <div className="rounded-2xl bg-card p-10 shadow-sm text-center ring-1 ring-ink-soft/10">
-              <div className="font-serif text-6xl leading-tight tracking-wide">{userFreeFormPhrase.hanzi}</div>
+              <div className="font-serif text-hanzi tracking-wide">{userFreeFormPhrase.hanzi}</div>
               {!hideTranslations && (
                 <>
                   <div className="mt-3 text-xl"><TonedPinyin text={userFreeFormPhrase.pinyin} /></div>
@@ -476,7 +484,7 @@ export default function Page() {
           {askAnswer && (
             <div className="rounded-2xl bg-card p-10 shadow-sm text-center ring-1 ring-emerald-700/20">
               <div className="text-[10px] uppercase tracking-widest text-emerald-700">You asked how to say</div>
-              <div className="mt-2 font-serif text-6xl leading-tight tracking-wide">{askAnswer.hanzi}</div>
+              <div className="mt-2 font-serif text-hanzi tracking-wide">{askAnswer.hanzi}</div>
               <div className="mt-3 text-xl"><TonedPinyin text={askAnswer.pinyin} /></div>
               <div className="mt-1 text-ink-soft">{askAnswer.english}</div>
               {askAnswer.note && <div className="mt-3 text-sm text-ink-soft italic">{askAnswer.note}</div>}

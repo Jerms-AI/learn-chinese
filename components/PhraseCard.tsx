@@ -75,7 +75,7 @@ export function PhraseCard({
                   className="group flex flex-col items-center leading-tight rounded-lg px-1 hover:bg-parchment transition cursor-pointer"
                 >
                   <span
-                    className="font-serif text-6xl tracking-wide group-hover:underline decoration-2 underline-offset-8"
+                    className="font-serif text-hanzi tracking-wide group-hover:underline decoration-2 underline-offset-8"
                     style={{ color }}
                   >
                     {seg.hanzi}
@@ -100,7 +100,7 @@ export function PhraseCard({
 
         {!useSegments && (
           <>
-            <div className="font-serif text-6xl leading-tight tracking-wide">{phrase.hanzi}</div>
+            <div className="font-serif text-hanzi tracking-wide">{phrase.hanzi}</div>
             {!hideTranslations && (
               <>
                 <div className="mt-3 text-xl">
