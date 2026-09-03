@@ -4,6 +4,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Hanzi display sizes scale with the viewport: ~36px on a phone, up to the
+   old text-6xl (60px) on a desktop. One utility so every card agrees. */
+@utility text-hanzi {
+  font-size: clamp(2.25rem, 2rem + 4vw, 3.75rem);
+  line-height: 1.15;
+}
+@utility text-hanzi-lg {
+  font-size: clamp(2.75rem, 2.25rem + 5vw, 4.5rem);
+  line-height: 1.1;
+}
+
 /*
  * Amber design language is the single source of truth for color.
  * shadcn semantic tokens (muted, primary, accent, etc.) are mapped onto Amber

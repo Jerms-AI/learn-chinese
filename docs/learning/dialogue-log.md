@@ -84,3 +84,10 @@ Format per entry: date · English → 汉字 · pinyin · notes/mnemonics · (an
   vocab/decks with cultural references (Wukong, Three Kingdoms) for engagement.
 - Final purchase list: Waste Tide, To Live, Wild Swans, A Hero Born, Monkey King (Lovell), Invisible Planets
   (contains Folding Beijing).
+
+**Illustrated Chinese-language reading for learners**
+- Graded readers: Mandarin Companion, Chinese Breeze; kids' books w/ pinyin (Peppa Pig 小猪佩奇); Du Chinese app
+- Manhua: 一人之下 (The Outcast), 非人哉 (4-panel myth comedy — Nezha/Wukong), 罗小黑战记, 狐妖小红娘, 三体 manhua
+- 连环画 lián huán huà — vintage picture-story books (西游记/三国); buy in Chengdu. 蔡志忠 philosophy comics.
+- App insight: reading mode could use short 4-panel-style micro-stories with pinyin toggle + tap-to-translate.
+  Kids'-book pattern (pinyin above hanzi) is the proven scaffold — consider ruby text rendering.
